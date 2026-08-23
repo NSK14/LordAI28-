@@ -37,8 +37,7 @@ export const Route = createFileRoute("/api/images/regenerate")({
           );
         }
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const db = context.supabase as any;
+          const db = context.supabase;
           const { data: record, error } = await db
             .from("generated_images")
             .select("*")

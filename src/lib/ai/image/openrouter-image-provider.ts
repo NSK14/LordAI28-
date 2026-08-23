@@ -6,8 +6,15 @@ import type { ProviderGenerateRequest, ProviderGenerateResult } from "./image-ty
 const BASE_URL = "https://openrouter.ai/api/v1/images/generations";
 const TIMEOUT_MS = 30_000;
 
-function asDataUrl(value: string): string {
-  return value.startsWith("data:") ? value : value;
+async function asDataUrl(value: string): Promise<string> {
+  if (value.startsWith("data:")) return value;
+  const response = await fetch(value, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`OpenRouter image URL returned ${response.status}.`);
+  const contentType = response.headers.get("content-type")?.split(";")[0] ?? "image/png";
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:${contentType};base64,${btoa(binary)}`;
 }
 
 /** OpenRouter's image endpoint. Only registry-approved fields are serialized. */
@@ -19,6 +26,7 @@ export async function generateOpenRouterImage(
     throw new ImageGenerationError("MISSING_CREDENTIALS", "OpenRouter configuration missing.", {
       hint: "Set OPENROUTER_API_KEY on the server.",
       model: request.model,
+      provider: "openrouter",
     });
   }
   const entry = getImageModel(request.model);
@@ -46,7 +54,7 @@ export async function generateOpenRouterImage(
     throw new ImageGenerationError(
       timeout ? "TIMEOUT" : "PROVIDER_ERROR",
       timeout ? "OpenRouter image request timed out." : "Could not reach OpenRouter.",
-      { model: request.model },
+      { model: request.model, provider: "openrouter" },
     );
   }
   if (!response.ok) {
@@ -64,19 +72,37 @@ export async function generateOpenRouterImage(
     throw new ImageGenerationError(code, `OpenRouter image request failed (${status}).`, {
       status,
       model: request.model,
+      provider: "openrouter",
     });
   }
-  const payload = (await response.json()) as { data?: Array<{ b64_json?: string; url?: string }> };
-  const images = (payload.data ?? []).flatMap((item) =>
-    item.b64_json
-      ? [`data:image/png;base64,${item.b64_json}`]
-      : item.url
-        ? [asDataUrl(item.url)]
-        : [],
-  );
+  let payload: { data?: Array<{ b64_json?: string; url?: string }> };
+  try {
+    payload = (await response.json()) as { data?: Array<{ b64_json?: string; url?: string }> };
+  } catch {
+    throw new ImageGenerationError(
+      "MALFORMED_RESPONSE",
+      "OpenRouter returned invalid image data.",
+      {
+        model: request.model,
+        provider: "openrouter",
+      },
+    );
+  }
+  const images = (
+    await Promise.all(
+      (payload.data ?? []).map((item) =>
+        item.b64_json
+          ? `data:image/png;base64,${item.b64_json}`
+          : item.url
+            ? asDataUrl(item.url)
+            : null,
+      ),
+    )
+  ).filter((image): image is string => image !== null);
   if (images.length === 0)
     throw new ImageGenerationError("MALFORMED_RESPONSE", "OpenRouter returned no image data.", {
       model: request.model,
+      provider: "openrouter",
     });
   return {
     provider: "openrouter",

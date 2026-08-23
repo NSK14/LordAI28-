@@ -46,7 +46,7 @@ function captureLogger(logs: unknown[][]): StructuredLogger {
 
 const baseRequest = {
   requestId: "test-1",
-  model: "@cf/black-forest-labs/flux-2-klein-9b",
+  model: "@cf/black-forest-labs/flux-1-schnell",
   prompt: "a cat",
   width: 1024,
   height: 1024,
@@ -64,6 +64,7 @@ afterEach(() => {
   delete process.env.CLOUDFLARE_ACCOUNT_ID;
   delete process.env.CLOUDFLARE_API_TOKEN;
   delete process.env.CLOUDFLARE_IMAGE_MODEL;
+  delete process.env.OPENROUTER_API_KEY;
 });
 
 describe("CloudflareImageProvider failure paths", () => {
@@ -190,6 +191,7 @@ describe("CloudflareImageProvider failure paths", () => {
   it("reports missing credentials before any network call", async () => {
     delete process.env.CLOUDFLARE_ACCOUNT_ID;
     delete process.env.CLOUDFLARE_API_TOKEN;
+    delete process.env.OPENROUTER_API_KEY;
     const fetchImpl = vi.fn(async () =>
       jsonResponse(200, { result: { image: "x" } }),
     ) as unknown as typeof fetch;
@@ -220,7 +222,7 @@ describe("image environment + configured-model validation (spec §5, §6)", () =
     const err = getImageEnvironmentError();
     expect(err).not.toBeNull();
     expect(err?.code).toBe("MISSING_CREDENTIALS");
-    expect(err?.message).toBe("Cloudflare configuration missing.");
+    expect(err?.message).toBe("Image generation is not configured.");
     expect(err?.recoverable).toBe(false);
   });
 

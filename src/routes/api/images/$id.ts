@@ -10,8 +10,7 @@ export const Route = createFileRoute("/api/images/$id")({
     handlers: {
       GET: async ({ params, context }) => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data, error } = await (context.supabase as any)
+          const { data, error } = await context.supabase
             .from("generated_images")
             .select("*")
             .eq("id", params.id)
@@ -31,8 +30,7 @@ export const Route = createFileRoute("/api/images/$id")({
       },
       DELETE: async ({ params, context }) => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (context.supabase as any)
+          const { error } = await context.supabase
             .from("generated_images")
             .delete()
             .eq("id", params.id)

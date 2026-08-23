@@ -73,6 +73,7 @@ export interface ImageErrorOptions {
   providerRequestId?: string;
   /** How long the failing call took, in ms. */
   durationMs?: number;
+  provider?: "cloudflare" | "openrouter";
 }
 
 /** The only error type the image pipeline throws. */
@@ -85,6 +86,7 @@ export class ImageGenerationError extends Error {
   readonly providerMessage?: string;
   readonly providerRequestId?: string;
   readonly durationMs?: number;
+  readonly provider: "cloudflare" | "openrouter";
 
   constructor(code: ImageErrorCode, message: string, options: ImageErrorOptions = {}) {
     super(message);
@@ -97,11 +99,13 @@ export class ImageGenerationError extends Error {
     this.providerMessage = options.providerMessage;
     this.providerRequestId = options.providerRequestId;
     this.durationMs = options.durationMs;
+    this.provider = options.provider ?? "cloudflare";
   }
 
   /** Structured, log-safe summary (never includes secrets or stack traces). */
   toLogFields(): Record<string, unknown> {
     return {
+      provider: this.provider,
       code: this.code,
       status: this.status,
       recoverable: this.recoverable,
@@ -145,7 +149,7 @@ export function toImageErrorBody(error: unknown, requestId?: string): ImageError
   if (safe.durationMs != null) details.durationMs = safe.durationMs;
   return {
     success: false,
-    provider: "cloudflare",
+    provider: safe.provider,
     status: safe.status,
     code: safe.code,
     error: safe.message,

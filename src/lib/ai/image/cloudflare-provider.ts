@@ -572,7 +572,7 @@ export class CloudflareImageProvider implements ImageProvider {
       format: mime,
       images: found.length,
     });
-    return found.map((b64) => toDataUrl(mime, b64));
+    return found.map((b64) => (b64.startsWith("data:") ? b64 : toDataUrl(mime, b64)));
   }
 
   // -------------------------------------------------------------------------

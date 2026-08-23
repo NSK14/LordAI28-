@@ -45,7 +45,11 @@ function dataUrlToUpload(url: string): { bytes: Uint8Array; contentType: string 
 
 function extensionFor(contentType: string): string {
   const extension = contentType.split("/")[1]?.toLowerCase();
-  return extension === "jpeg" ? "jpg" : extension && /^[a-z0-9]+$/.test(extension) ? extension : "png";
+  return extension === "jpeg"
+    ? "jpg"
+    : extension && /^[a-z0-9]+$/.test(extension)
+      ? extension
+      : "png";
 }
 
 async function uploadGeneratedImage(
@@ -102,7 +106,13 @@ export async function persistImages(
     }
 
     for (let i = 0; i < result.images.length; i += 1) {
-      const uploaded = await uploadGeneratedImage(supabase, userId, result.requestId, i, result.images[i]);
+      const uploaded = await uploadGeneratedImage(
+        supabase,
+        userId,
+        result.requestId,
+        i,
+        result.images[i],
+      );
       let messageId: string | null = null;
       if (conversationId) {
         const { data: message, error: messageError } = await supabase

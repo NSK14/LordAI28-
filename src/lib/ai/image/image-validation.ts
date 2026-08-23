@@ -5,7 +5,11 @@
 
 import { ImageGenerationError } from "./image-errors";
 import { readEnvApiKey } from "../../env.server";
-import { DEFAULT_IMAGE_MODEL_ID, isRegisteredImageModel } from "./image-models";
+import {
+  DEFAULT_IMAGE_MODEL_ID,
+  getImageModelProvider,
+  isRegisteredImageModel,
+} from "./image-models";
 
 const ACCOUNT_ENV = "CLOUDFLARE_ACCOUNT_ID";
 const TOKEN_ENV = "CLOUDFLARE_API_TOKEN";
@@ -40,7 +44,9 @@ export function getImageEnvironmentError(): ImageGenerationError | null {
 export function getConfiguredModelError(): ImageGenerationError | null {
   const configured = process.env[MODEL_ENV]?.trim();
   if (!configured) return null;
-  if (isRegisteredImageModel(configured)) return null;
+  if (isRegisteredImageModel(configured) && getImageModelProvider(configured) === "cloudflare") {
+    return null;
+  }
   return new ImageGenerationError(
     "INVALID_MODEL",
     `Configured model does not exist. Expected: ${DEFAULT_IMAGE_MODEL_ID} Received: ${configured}`,

@@ -48,8 +48,7 @@ export const Route = createFileRoute("/api/images")({
       GET: async ({ context }) => {
         // Image history for the authenticated user (structured, no secrets).
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data, error } = await (context.supabase as any)
+          const { data, error } = await context.supabase
             .from("generated_images")
             .select("*")
             .eq("user_id", context.userId)
@@ -86,8 +85,7 @@ export const Route = createFileRoute("/api/images")({
         }
 
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const db = context.supabase as any;
+          const db = context.supabase;
 
           if (parsed.projectId) {
             const { data: project } = await db

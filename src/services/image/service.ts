@@ -101,8 +101,7 @@ export const ImageService = {
   },
 
   async getHistory(limit = 100): Promise<ImageRecord[]> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from("generated_images")
       .select("*")
       .order("created_at", { ascending: false })
@@ -112,14 +111,12 @@ export const ImageService = {
   },
 
   async deleteImage(id: string): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any).from("generated_images").delete().eq("id", id);
+    const { error } = await supabase.from("generated_images").delete().eq("id", id);
     if (error) throw error;
   },
 
   async favoriteImage(id: string, favorite: boolean): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from("generated_images")
       .update({ is_favorite: favorite })
       .eq("id", id);

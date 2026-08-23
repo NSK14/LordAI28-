@@ -131,16 +131,21 @@ export async function routeImageRequest(
   const allCandidates = buildFallbackChain({
     requested: requestedModel,
     preferred: configuredModel,
-    isSelectable: selectableFilter(),
   });
+  const cloudflareSelectable = selectableFilter();
+  const selectableCandidates = cloudflareSelectable
+    ? allCandidates.filter(
+        (entry) => entry.provider !== "cloudflare" || cloudflareSelectable(entry),
+      )
+    : allCandidates;
   // Cloudflare is always preferred. OpenRouter is reached only after every
   // Cloudflare candidate failed, even if a previous request selected it.
   const chain = [
-    ...allCandidates.filter((entry) => getImageModelProvider(entry.id) === "cloudflare"),
+    ...selectableCandidates.filter((entry) => getImageModelProvider(entry.id) === "cloudflare"),
     ...(requestedModel && getImageModelProvider(requestedModel) === "openrouter"
-      ? allCandidates.filter((entry) => entry.id === requestedModel)
+      ? selectableCandidates.filter((entry) => entry.id === requestedModel)
       : []),
-    ...allCandidates.filter(
+    ...selectableCandidates.filter(
       (entry) => getImageModelProvider(entry.id) === "openrouter" && entry.id !== requestedModel,
     ),
   ];
@@ -150,6 +155,7 @@ export async function routeImageRequest(
   let totalRetries = 0;
   let usedModel: string | null = null;
   let usedEntry: ReturnType<typeof getImageModel>;
+  let lastFailure: ImageGenerationError | null = null;
   const queueStart = Date.now();
 
   for (const entry of chain) {
@@ -178,7 +184,8 @@ export async function routeImageRequest(
           ? await generateOpenRouterImage(genRequest)
           : await cloudflareImageProvider.generate(genRequest);
     } catch (error) {
-      attempts.push(makeFailureAttempt(entry.id, entry.label, toGenerationError(error, requestId)));
+      lastFailure = toGenerationError(error, requestId);
+      attempts.push(makeFailureAttempt(entry.id, entry.label, lastFailure));
       continue;
     }
     attempts.push(makeSuccessAttempt(entry.id, entry.label, first));
@@ -200,9 +207,8 @@ export async function routeImageRequest(
         totalRetries += extra.retryCount;
         attempts.push(makeSuccessAttempt(entry.id, entry.label, extra));
       } catch (error) {
-        attempts.push(
-          makeFailureAttempt(entry.id, entry.label, toGenerationError(error, requestId)),
-        );
+        lastFailure = toGenerationError(error, requestId);
+        attempts.push(makeFailureAttempt(entry.id, entry.label, lastFailure));
       }
     }
 
@@ -212,7 +218,16 @@ export async function routeImageRequest(
   }
 
   if (!usedModel || !usedEntry) {
-    throw allModelsUnavailableError();
+    throw allModelsUnavailableError(
+      lastFailure
+        ? {
+            model: lastFailure.model,
+            provider: lastFailure.provider,
+            providerMessage: lastFailure.message,
+            durationMs: lastFailure.durationMs,
+          }
+        : {},
+    );
   }
 
   const queueTimeMs = Date.now() - queueStart;

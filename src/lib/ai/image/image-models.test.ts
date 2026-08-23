@@ -39,13 +39,13 @@ describe("image model registry", () => {
   });
 
   it("builds a provider-aware fallback chain with no duplicates", () => {
-    const chain = buildFallbackChain({ requested: "qwen/qwen-image-3-pro" });
+    const chain = buildFallbackChain({ requested: "qwen/qwen-image" });
     const ids = chain.map((m) => m.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(chain.some((m) => m.id === "qwen/qwen-image-3-pro")).toBe(true);
+    expect(chain.some((m) => m.id === "qwen/qwen-image")).toBe(true);
     expect(chain.some((m) => m.provider === "cloudflare")).toBe(true);
     // Requested model is attempted first.
-    expect(chain[0].id).toBe("qwen/qwen-image-3-pro");
+    expect(chain[0].id).toBe("qwen/qwen-image");
   });
 
   it("exposes a sane selectable chain when a health filter disqualifies everything", () => {

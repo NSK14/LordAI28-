@@ -11,8 +11,7 @@ import {
 import { getImageModel } from "./image-models";
 
 const schnell = getImageModel("@cf/black-forest-labs/flux-1-schnell")!;
-const sdxl = getImageModel("@cf/bytedance/stable-diffusion-xl-lightning")!;
-const klein = getImageModel("@cf/black-forest-labs/flux-2-klein-9b")!;
+const openRouterFlux = getImageModel("black-forest-labs/flux.1-schnell")!;
 
 describe("image capability resolution", () => {
   it("reduces pixel dimensions to a stable aspect ratio string", () => {
@@ -27,9 +26,8 @@ describe("image capability resolution", () => {
   });
 
   it("snaps dimensions to multiples of 64 within bounds", () => {
-    const dims = resolveModelDimensions(sdxl, { width: 1000, height: 1000 });
-    expect(dims.width % 64).toBe(0);
-    expect(dims.height % 64).toBe(0);
+    const dims = resolveModelDimensions(openRouterFlux, { width: 1000, height: 1000 });
+    expect(dims.native).toBe(true);
     expect(dims.width).toBe(1024);
     expect(dims.height).toBe(1024);
   });
@@ -47,25 +45,22 @@ describe("image capability resolution", () => {
     expect(steps).toEqual({ param: "steps", value: 8 });
     expect(resolveGuidance(schnell, "high")).toBeNull();
 
-    // SDXL Lightning declares both steps (num_steps) and guidance.
-    const sdxlSteps = resolveSteps(sdxl, "balanced");
-    expect(sdxlSteps).toEqual({ param: "num_steps", value: 12 });
-    expect(resolveGuidance(sdxl, "balanced")).toBe(7.5);
+    expect(resolveSteps(openRouterFlux, "balanced")).toBeNull();
+    expect(resolveGuidance(openRouterFlux, "balanced")).toBeNull();
   });
 
   it("drops the seed for models without a seed parameter", () => {
     expect(resolveSeed(schnell, 123)).toBeNull();
-    expect(resolveSeed(klein, 123)).toBe(123);
+    expect(resolveSeed(openRouterFlux, 123)).toBe(123);
   });
 
   it("unions per-model capabilities for the provider UI", () => {
     const caps = getProviderCapabilities([
       "@cf/black-forest-labs/flux-1-schnell",
-      "@cf/bytedance/stable-diffusion-xl-lightning",
+      "black-forest-labs/flux.1-schnell",
     ]);
     expect(caps.provider).toBe("cloudflare");
-    // SDXL supports negative prompt / seed, so the union enables those controls.
-    expect(caps.supportsNegativePrompt).toBe(true);
+    expect(caps.supportsNegativePrompt).toBe(false);
     expect(caps.supportsSeed).toBe(true);
     // No registered model edits, so editing stays disabled everywhere.
     expect(caps.supportsEditing).toBe(false);
