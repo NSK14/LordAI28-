@@ -156,11 +156,8 @@ function resolveChatFailure(args: {
   }
 
   // Routing exhausted (or aborted before routing completed).
-  const userMessage = !routing
-    ? "The AI request failed before the provider fallback could complete. Please try again in a few moments."
-    : !routing.allProvidersAttempted
-      ? `The AI request stopped before every configured provider was tried (not attempted: ${routing.notAttemptedProviders.join(", ")}). Please try again in a few moments.`
-      : "All AI providers are temporarily unavailable. Please try again in a few moments.";
+  const userMessage =
+    "The AI is temporarily unavailable. Please try again in a few moments.";
 
   return {
     code: "AI_UPSTREAM_ERROR",

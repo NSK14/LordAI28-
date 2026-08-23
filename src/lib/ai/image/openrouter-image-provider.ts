@@ -6,9 +6,23 @@ import type { ProviderGenerateRequest, ProviderGenerateResult } from "./image-ty
 const BASE_URL = "https://openrouter.ai/api/v1/images/generations";
 const TIMEOUT_MS = 30_000;
 
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function asDataUrl(value: string): Promise<string> {
   if (value.startsWith("data:")) return value;
-  const response = await fetch(value, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const response = await fetchWithTimeout(value, {}, TIMEOUT_MS);
   if (!response.ok) throw new Error(`OpenRouter image URL returned ${response.status}.`);
   const contentType = response.headers.get("content-type")?.split(";")[0] ?? "image/png";
   const bytes = new Uint8Array(await response.arrayBuffer());
@@ -42,12 +56,15 @@ export async function generateOpenRouterImage(
   const startedAt = Date.now();
   let response: Response;
   try {
-    response = await fetch(BASE_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
+    response = await fetchWithTimeout(
+      BASE_URL,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      TIMEOUT_MS,
+    );
   } catch (error) {
     const timeout =
       error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");

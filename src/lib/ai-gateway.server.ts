@@ -368,9 +368,11 @@ function makeProviderFetch(provider: ProviderName, timeoutMs: number, logger: Lo
       payload: summarizePayload(init?.body as string | undefined),
     });
 
-    const timeout = AbortSignal.timeout(timeoutMs);
-    const signal = init?.signal ? mergeAbortSignals([init.signal, timeout]) : timeout;
-
+    const timeoutController = new AbortController();
+    const timeoutTimer = setTimeout(() => timeoutController.abort(), timeoutMs);
+    const signal = init?.signal
+      ? mergeAbortSignals([init.signal, timeoutController.signal])
+      : timeoutController.signal;
     try {
       const response = await fetch(input, { ...init, signal });
 
@@ -455,6 +457,8 @@ function makeProviderFetch(provider: ProviderName, timeoutMs: number, logger: Lo
       );
       (structured as unknown as { lordProvider?: string }).lordProvider = provider;
       throw structured;
+    } finally {
+      clearTimeout(timeoutTimer);
     }
   };
 }
@@ -1270,6 +1274,14 @@ export async function findFirstWorkingModel(opts: StreamWithFallbackOptions): Pr
     const { provider, modelId } = candidate;
     const attemptNum = i + 1;
 
+    // The plan is built once, but provider failures are discovered while it is
+    // being consumed. Re-check the request context here so a provider-scoped
+    // failure (429, auth, timeout, network, or 5xx) removes all of its later
+    // candidates from this request immediately.
+    if (routingContext.getSkip(provider)) {
+      continue;
+    }
+
     // Provider already failed authentication in this request: skip the rest of
     // its models straight away (task 5 / task 6) and continue with the next
     // provider instead of burning another round trip on a rejected key.
@@ -1317,6 +1329,7 @@ export async function findFirstWorkingModel(opts: StreamWithFallbackOptions): Pr
     }
 
     markAttempted(provider);
+    routingContext.markAttempt(provider, modelId);
 
     // Exponential retry for transient probe failures: a provider may be
     // flapping, so we retry a couple of times before giving up on it.
@@ -1397,12 +1410,20 @@ export async function findFirstWorkingModel(opts: StreamWithFallbackOptions): Pr
         // Record the failure at the single source of truth. A cooldown-capable
         // failure (e.g. 429) immediately disables this provider for the rest of
         // the request via `buildRoutingPlan`, so it is never re-tried here.
+        const failureKind = failureKindFromClassification(classification);
         infra.providerHealth.recordFailure(errProvider, {
-          kind: failureKindFromClassification(classification),
+          kind: failureKind,
           status: classification.status,
           message: classification.providerMessage ?? attempt.reason,
           model: errProvider === provider ? modelId : undefined,
           latencyMs: 0,
+        });
+        routingContext.recordFailure({
+          provider: errProvider,
+          kind: failureKind,
+          status: classification.status,
+          model: errProvider === provider ? modelId : undefined,
+          message: classification.providerMessage ?? attempt.reason,
         });
 
         // Authentication failure (401/403, or Gemini's 400 API_KEY_INVALID):

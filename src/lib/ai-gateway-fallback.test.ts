@@ -155,6 +155,24 @@ describe("provider fallback and authentication handling", () => {
     expect(attemptedProviders(calls)).toContain("openrouter");
   });
 
+  it("does not retry a rate-limited provider before falling back", async () => {
+    const { state, gateway, calls } = makeHarness({
+      gemini: authError(429, OPENROUTER_RATE_LIMIT_BODY),
+      openai: "ok",
+      openrouter: "ok",
+    });
+
+    const result = await findFirstWorkingModel({
+      ...baseOpts,
+      gateway,
+      state,
+      mode: "balanced",
+    });
+
+    expect(result.provider).toBe("openai");
+    expect(calls.filter((call) => call.provider === "gemini")).toHaveLength(1);
+  });
+
   it("returns a successful OpenRouter response when only OpenRouter has a working key", async () => {
     const { state, gateway } = makeHarness({
       gemini: authError(403, GEMINI_INVALID_KEY_BODY),

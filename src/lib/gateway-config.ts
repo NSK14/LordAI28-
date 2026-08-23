@@ -41,7 +41,9 @@ export const RETRY_POLICY: Record<string, { retryable: boolean; maxRetries: numb
   "401": { retryable: false, maxRetries: 0 },
   "403": { retryable: false, maxRetries: 0 },
   "422": { retryable: false, maxRetries: 0 },
-  "429": { retryable: true, maxRetries: 3 },
+  // Rate limits fail over to the next provider. Retrying the same provider
+  // during this request only delays fallback and can amplify throttling.
+  "429": { retryable: false, maxRetries: 0 },
   "500": { retryable: true, maxRetries: 2 },
   "503": { retryable: true, maxRetries: 2 },
   timeout: { retryable: true, maxRetries: 2 },
