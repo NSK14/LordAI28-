@@ -156,8 +156,7 @@ function resolveChatFailure(args: {
   }
 
   // Routing exhausted (or aborted before routing completed).
-  const userMessage =
-    "The AI is temporarily unavailable. Please try again in a few moments.";
+  const userMessage = "The AI is temporarily unavailable. Please try again in a few moments.";
 
   return {
     code: "AI_UPSTREAM_ERROR",

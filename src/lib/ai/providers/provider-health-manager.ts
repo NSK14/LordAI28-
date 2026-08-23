@@ -35,6 +35,8 @@ import {
   type ProviderSkip,
 } from "./provider-types";
 
+export { type ProviderFailure, type ProviderHealth, type ProviderSkip } from "./provider-types";
+
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------

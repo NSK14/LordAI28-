@@ -20,7 +20,11 @@
     "build:android": "npm run build:android:apk",
     "build:android:apk": "npm run build && npx cap sync android && cd android && ./gradlew assembleDebug",
     "build:android:aab": "npm run build && npx cap sync android && cd android && ./gradlew bundleRelease",
-    "build:ios": "npm run build && npx cap sync ios"
+    "build:ios": "npm run build && npx cap sync ios",
+    "docker:build": "docker build -t lordai .",
+    "docker:run": "docker run -p 3000:3000 --env-file .env lordai",
+    "docker:compose": "docker-compose up -d",
+    "docker:stop": "docker-compose down"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.104",
