@@ -211,6 +211,7 @@ export function createRequestRoutingContext(
 
   return {
     requestId,
+    requestStartedAt,
     attemptedProviders,
     get exhaustedProviders() {
       return [...exhausted.keys()];

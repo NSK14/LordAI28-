@@ -1074,6 +1074,13 @@ function buildRoutingPlan(
   const resolvedExplicit = opts.explicitModelId ? resolveCandidate(opts.explicitModelId) : null;
   const hasKey = (provider: ProviderName) => !!state.meta[provider]?.hasKey;
 
+  // Keep the health manager aligned with the provider instances created for
+  // this request. A fresh manager starts providers as unconfigured, while the
+  // provider state is the authoritative result of environment validation.
+  for (const provider of ["gemini", "openrouter", "openai"] as const) {
+    infra.providerHealth.setConfigured(provider, hasKey(provider));
+  }
+
   const modeCandidates = getModeCandidates(
     mode,
     resolvedExplicit ? undefined : opts.explicitModelId,
@@ -1115,6 +1122,7 @@ function buildRoutingPlan(
 
   const ordered = [...modeCandidates, ...providerCompletion];
   const usable: Candidate[] = [];
+  const deferredCandidates: Candidate[] = [];
   const deferred = new Set<string>();
 
   for (const candidate of ordered) {
@@ -1127,7 +1135,6 @@ function buildRoutingPlan(
     // Per-request guarantee: never retry a provider that already failed here.
     const requestSkip = context.getSkip(provider);
     if (requestSkip) {
-      deferred.add(candidateKey(candidate));
       continue;
     }
     // Single source of truth: the health manager owns cooldown + circuit state.
@@ -1136,25 +1143,28 @@ function buildRoutingPlan(
     // cooldown triggered *by this request* is ignored here (the per-request
     // context already blocks the re-try); cross-request cooldowns still block.
     const managerSkip = infra.providerHealth.getSkip(provider, {
-      requestStartedAt: routingContext.requestStartedAt,
+      requestStartedAt: context.requestStartedAt,
     });
-    if (managerSkip) {
-      deferred.add(candidateKey(candidate));
-      continue;
-    }
+    if (managerSkip && managerSkip.code !== "not_configured") continue;
     // Legacy per-model guards, kept for the admin view's granularity.
     if (infra.circuitBreaker.isOpen(provider, candidate.modelId)) {
       deferred.add(candidateKey(candidate));
+      deferredCandidates.push(candidate);
       continue;
     }
     if (!infra.healthCache.isHealthy(provider, candidate.modelId)) {
       deferred.add(candidateKey(candidate));
+      deferredCandidates.push(candidate);
       continue;
     }
     usable.push(candidate);
   }
 
-  return { plan: usable, deferred, configuredProviders };
+  // A stale model-level health entry is a soft signal, not permission to
+  // report that fallback never ran. Try healthy candidates first, then make a
+  // last-resort attempt against deferred models. Provider cooldowns and
+  // per-request failures remain hard exclusions above.
+  return { plan: [...usable, ...deferredCandidates], deferred, configuredProviders };
 }
 
 function buildProviderStatuses(

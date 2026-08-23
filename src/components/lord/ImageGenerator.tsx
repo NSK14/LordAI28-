@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, Copy, RefreshCw, Sparkles, Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,7 @@ import {
   resolveDimensions,
   type ImageSizePreset,
 } from "@/lib/image-settings";
-import {
-  IMAGE_MODEL_REGISTRY,
-  DEFAULT_IMAGE_MODEL_ID,
-  inferImagePromptProfile,
-} from "@/lib/ai/image";
+import { inferImagePromptProfile } from "@/lib/ai/image";
 import { getErrorMessage, getErrorCode, getErrorHint } from "@/lib/error-message";
 
 type Stage = "idle" | "preparing" | "generating" | "saving" | "done" | "error";
@@ -47,7 +43,6 @@ export default function ImageGenerator({
   const [aspectRatio, setAspectRatio] = useState(defaults.defaultAspectRatio);
   const [count, setCount] = useState(defaults.defaultImageCount);
   const [seed, setSeed] = useState<string>("");
-  const [model, setModel] = useState(defaults.defaultModel || DEFAULT_IMAGE_MODEL_ID);
   const [quality, setQuality] = useState<"fast" | "balanced" | "high">(defaults.defaultQuality);
   const [enhancePrompt, setEnhancePrompt] = useState(defaults.enhancePrompt);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -67,9 +62,8 @@ export default function ImageGenerator({
       defaultImageCount: count,
       defaultQuality: quality,
       enhancePrompt,
-      defaultModel: model,
     });
-  }, [sizePreset, aspectRatio, count, quality, enhancePrompt, model]);
+  }, [sizePreset, aspectRatio, count, quality, enhancePrompt]);
 
   const effectivePrompt = prompt.trim();
   const canGenerate = effectivePrompt.length > 0 && !busy;
@@ -95,7 +89,6 @@ export default function ImageGenerator({
         height,
         count,
         seed: seedNum,
-        model,
         quality,
         enhancePrompt,
         profile,
@@ -143,21 +136,11 @@ export default function ImageGenerator({
   const cardShell =
     variant === "modal" ? "rounded-2xl bg-[#031426] p-6" : "hud-panel rounded-xl p-6";
 
-  const modelOptions = useMemo(
-    () =>
-      IMAGE_MODEL_REGISTRY.filter((m) => m.provider === "cloudflare").map((m) => ({
-        id: m.id,
-        label: m.label,
-      })),
-    [],
-  );
-
   return (
     <div className={cardShell}>
-      {/* Cloudflare is primary; the server transparently uses OpenRouter if needed. */}
       <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
         <Sparkles className="h-4 w-4 text-[color:var(--hud)]" />
-        <span>Cloudflare Workers AI · automatic fallback enabled</span>
+        <span>Automatic image routing · backup service enabled</span>
       </div>
 
       {/* Prompt */}
@@ -269,23 +252,6 @@ export default function ImageGenerator({
           <div className="mt-2 grid gap-3 rounded-md border border-border/30 bg-background/20 p-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs uppercase tracking-wider text-muted-foreground">
-                Model
-              </label>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="w-full rounded-md border border-border/40 bg-background/30 px-3 py-2 text-sm"
-              >
-                <option value={DEFAULT_IMAGE_MODEL_ID}>Default (auto)</option>
-                {modelOptions.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs uppercase tracking-wider text-muted-foreground">
                 Quality
               </label>
               <select
@@ -330,7 +296,7 @@ export default function ImageGenerator({
           <Loader2 className="h-4 w-4 animate-spin" />
           <span>
             {stage === "generating"
-              ? "Sending request to Cloudflare…"
+              ? "Choosing the best image service…"
               : stage === "preparing"
                 ? "Preparing request…"
                 : "Working…"}

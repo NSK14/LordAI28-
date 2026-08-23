@@ -1763,7 +1763,7 @@ function ChatPage() {
               </li>
             );
           })()}
-        {(persistenceError || storedMessagesError) && (
+        {(persistenceError || storedMessagesError) && !messagesContainErrorPart && (
           <li className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
             {persistenceError ??
               (storedMessagesError instanceof Error

@@ -106,11 +106,11 @@ export const IMAGE_MODELS: readonly ImageModelDefinition[] = [
   },
 
   {
-    id: "@cf/black-forest-labs/flux-1-dev",
+    id: "@cf/google/nano-banana-2-lite",
     provider: "cloudflare",
     supports: ["image"],
-    label: "FLUX Dev",
-    description: "Higher quality FLUX image generation.",
+    label: "Banana Lite",
+    description: "Higher quality Gemini image generation.",
     badges: ["Cloudflare", "Quality"],
     maxWidth: 2048,
     maxHeight: 2048,
@@ -123,7 +123,7 @@ export const IMAGE_MODELS: readonly ImageModelDefinition[] = [
   },
 
   {
-    id: "@cf/black-forest-labs/flux-1-kontext-dev",
+    id: "@cf/black-forest-labs/flux-1-kontext-max",
     provider: "cloudflare",
     supports: ["image"],
     label: "FLUX Kontext",
@@ -141,10 +141,10 @@ export const IMAGE_MODELS: readonly ImageModelDefinition[] = [
   },
 
   {
-    id: "@cf/black-forest-labs/flux-1-kontext-max",
+    id: "@cf/xai/grok-imagine-image-2.0",
     provider: "cloudflare",
     supports: ["image"],
-    label: "FLUX Kontext Max",
+    label: "Grok Imagine Image",
     description: "Premium Cloudflare image model.",
     badges: ["Cloudflare", "Premium"],
     maxWidth: 4096,
@@ -163,10 +163,10 @@ export const IMAGE_MODELS: readonly ImageModelDefinition[] = [
   // OpenRouter Images
   // -----------------------------
   {
-    id: "x-ai/grok-imagine-image-2.0",
+    id: "x-ai/xai/grok-imagine-image-quality",
     provider: "openrouter",
     supports: ["image"],
-    label: "Grok Imagine Image",
+    label: "Grok Imagine Premium Quality Image",
     description: "OpenRouter image generation by xAI.",
     badges: ["OpenRouter"],
     maxWidth: 2048,
@@ -301,8 +301,8 @@ export const LORD_MODELS: Record<LordMode, readonly Candidate[]> = {
 
   // 🧠 Strong reasoning
   reasoning: [
-    candidate("openai", "gpt-4o"),
     candidate("gemini", "gemini-2.5-flash"),
+    candidate("openai", "gpt-4o"),
     candidate("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
     candidate("openrouter", "openai/gpt-oss-20b:free"),
   ],

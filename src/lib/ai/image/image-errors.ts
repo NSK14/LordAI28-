@@ -185,12 +185,12 @@ export function isTimeoutLike(error: unknown): boolean {
   return false;
 }
 
-/** The error thrown when every configured Cloudflare model failed (spec §8). */
+/** The error thrown when every configured image model failed (spec §8). */
 export function allModelsUnavailableError(options: ImageErrorOptions = {}): ImageGenerationError {
   return new ImageGenerationError(
     "ALL_MODELS_FAILED",
-    "All Cloudflare image models are unavailable.",
-    { hint: "Check Cloudflare Workers AI status and credentials, then retry.", ...options },
+    "Image generation is temporarily unavailable.",
+    { hint: "LORD tried its available image services. Please retry shortly.", ...options },
   );
 }
 
