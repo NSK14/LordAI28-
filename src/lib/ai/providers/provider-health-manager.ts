@@ -147,7 +147,7 @@ export interface ProviderHealthManager {
   /** True when the provider is inside an active cooldown window. */
   isInCooldown(provider: ProviderId): boolean;
   /** Non-null when the provider must be skipped, explaining exactly why. */
-  getSkip(provider: ProviderId): ProviderSkip | null;
+  getSkip(provider: ProviderId, options?: { requestStartedAt?: number }): ProviderSkip | null;
   /** Milliseconds left on the cooldown; 0 when not cooling down. */
   getCooldownRemainingMs(provider: ProviderId): number;
   circuitState(provider: ProviderId): ProviderCircuitState;
@@ -508,7 +508,7 @@ export function createProviderHealthManager(
       return cooldownActive(state(provider));
     },
 
-    getSkip(provider) {
+    getSkip(provider, options) {
       const entry = state(provider);
       if (!entry.configured) {
         return {
@@ -528,6 +528,15 @@ export function createProviderHealthManager(
         };
       }
       if (cooldownActive(entry)) {
+        // Ignore a cooldown that this very request just triggered: it does not
+        // count as "already attempted" for the all-providers-attempted
+        // guarantee, and the per-request context already blocks re-trying the
+        // provider within the same request. Cross-request cooldowns still block.
+        const startedAt = options?.requestStartedAt;
+        const cooldownStartedAt = entry.lastFailureAt ?? 0;
+        if (startedAt !== undefined && cooldownStartedAt >= startedAt) {
+          return null;
+        }
         const retryAt = entry.cooldownUntil as number;
         return {
           provider,

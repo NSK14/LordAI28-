@@ -54,8 +54,8 @@ export interface ImageModelGuidanceConfig {
 export interface ImageModelRegistryEntry {
   /** Workers AI model id, e.g. `@cf/black-forest-labs/flux-2-klein-9b`. */
   id: string;
-  /** Explicit for current entries; legacy Cloudflare entries omit it. */
-  provider?: ImageProviderId;
+  /** Owning transport. Routing must always use this explicit value. */
+  provider: ImageProviderId;
   label: string;
   description: string;
   badges: readonly string[];
@@ -83,62 +83,9 @@ export interface ImageModelRegistryEntry {
   declaredOutput?: string;
 }
 
-/** Parameters the FLUX.2 multipart passthrough accepts. */
-const MULTIPART_PARAMS = [
-  "prompt",
-  "width",
-  "height",
-  "seed",
-  "aspect_ratio",
-  "output_format",
-  "prompt_upsampling",
-  "steps",
-  "guidance",
-] as const;
-
-const MULTIPART_BOUNDS: Record<string, ParamBounds> = {
-  width: { min: 256, max: 2048 },
-  height: { min: 256, max: 2048 },
-  seed: { min: 0 },
-};
-
-/** Parameters shared by the Stable-Diffusion-family schemas. */
-const SD_PARAMS = [
-  "prompt",
-  "negative_prompt",
-  "height",
-  "width",
-  "image",
-  "image_b64",
-  "mask",
-  "num_steps",
-  "strength",
-  "guidance",
-  "seed",
-] as const;
-
-const SD_BOUNDS: Record<string, ParamBounds> = {
-  width: { min: 256, max: 2048 },
-  height: { min: 256, max: 2048 },
-  num_steps: { min: 1, max: 20 },
-  guidance: { min: 0, max: 20 },
-  seed: { min: 0 },
-};
-
-const SD_STEPS: ImageModelStepsConfig = {
-  param: "num_steps",
-  byQuality: { fast: 6, balanced: 12, high: 20 },
-};
-
-const SD_GUIDANCE: ImageModelGuidanceConfig = {
-  byQuality: { fast: 6, balanced: 7.5, high: 9 },
-};
-
 /**
- * The registry. Order here is documentation only — {@link IMAGE_MODEL_REGISTRY}
- * is sorted by `priority`, which is also the automatic fallback chain:
- *
- *   FLUX 2 Klein → FLUX Schnell → FLUX 2 Dev → SDXL Lightning → …
+ * The canonical registry. It intentionally contains only supported production
+ * models. Provider ownership is declared, never inferred from a model string.
  */
 const REGISTRY_ENTRIES: readonly ImageModelRegistryEntry[] = [
   {
@@ -199,223 +146,66 @@ const REGISTRY_ENTRIES: readonly ImageModelRegistryEntry[] = [
     estimatedCost: 0,
   },
   {
-    id: "x-ai/grok-imagine-image-2.0",
+    id: "black-forest-labs/flux.1-dev",
     provider: "openrouter",
-    label: "Grok Imagine Image",
-    description: "OpenRouter image generation by xAI.",
+    label: "FLUX.1 Dev",
+    description: "OpenRouter fallback for detailed images.",
     badges: ["OpenRouter"],
     priority: 101,
     inputMode: "json",
-    params: ["prompt", "aspect_ratio", "quality", "resolution"],
+    params: ["prompt", "aspect_ratio", "quality", "resolution", "seed"],
     bounds: {},
     nativeSize: { width: 1024, height: 1024 },
     maxImages: 1,
     estimatedCost: 0,
   },
   {
-    id: "black-forest-labs/flux.2-max",
+    id: "black-forest-labs/flux.1-schnell",
     provider: "openrouter",
-    label: "FLUX 2 Max",
-    description: "OpenRouter FLUX image generation.",
+    label: "FLUX.1 Schnell",
+    description: "Fast OpenRouter FLUX fallback.",
     badges: ["OpenRouter"],
     priority: 102,
     inputMode: "json",
-    params: ["prompt", "aspect_ratio", "seed"],
+    params: ["prompt", "aspect_ratio", "quality", "resolution", "seed"],
     bounds: { seed: { min: 0 } },
     nativeSize: { width: 1024, height: 1024 },
     maxImages: 1,
     estimatedCost: 0,
   },
   {
-    id: "google/gemini-3.1-flash-lite-image",
+    id: "qwen/qwen-image",
     provider: "openrouter",
-    label: "Gemini Flash Lite Image",
-    description: "OpenRouter Gemini image generation.",
+    label: "Qwen Image",
+    description: "OpenRouter Qwen image fallback.",
     badges: ["OpenRouter"],
     priority: 103,
     inputMode: "json",
-    params: ["prompt", "resolution"],
+    params: ["prompt", "aspect_ratio", "resolution", "seed"],
     bounds: {},
     nativeSize: { width: 1024, height: 1024 },
     maxImages: 1,
     estimatedCost: 0,
   },
   {
-    id: "qwen/qwen-image-3-pro",
+    id: "google/gemini-image",
     provider: "openrouter",
-    label: "Qwen Image 3 Pro",
-    description: "OpenRouter Qwen image generation.",
+    label: "Gemini Image",
+    description: "OpenRouter Gemini image fallback.",
     badges: ["OpenRouter"],
     priority: 104,
     inputMode: "json",
-    params: ["prompt", "resolution", "seed"],
+    params: ["prompt", "aspect_ratio", "resolution"],
     bounds: { seed: { min: 0 } },
     nativeSize: { width: 1024, height: 1024 },
     maxImages: 1,
     estimatedCost: 0,
-  },
-  {
-    id: "@cf/black-forest-labs/flux-2-klein-9b",
-    label: "FLUX 2 Klein",
-    description: "Black Forest Labs FLUX.2 Klein 9B — best overall quality and prompt adherence.",
-    badges: ["Recommended", "High Quality"],
-    priority: 1,
-    inputMode: "multipart",
-    params: MULTIPART_PARAMS,
-    bounds: MULTIPART_BOUNDS,
-    nativeSize: { width: 1024, height: 1024 },
-    maxImages: 4,
-    estimatedCost: 0,
-    declaredOutput: "application/json",
-  },
-  {
-    id: "@cf/black-forest-labs/flux-1-schnell",
-    label: "FLUX Schnell",
-    description: "FLUX.1 schnell — fastest generation, ideal for drafts and iteration.",
-    badges: ["Fast"],
-    priority: 2,
-    inputMode: "json",
-    // Strict schema: prompt + steps only. Anything else is a hard 400.
-    params: ["prompt", "steps"],
-    bounds: { steps: { min: 1, max: 8 } },
-    nativeSize: { width: 1024, height: 1024 },
-    steps: { param: "steps", byQuality: { fast: 4, balanced: 6, high: 8 } },
-    maxImages: 4,
-    estimatedCost: 0,
-    declaredOutput: "application/json",
-  },
-  {
-    id: "@cf/black-forest-labs/flux-2-dev",
-    label: "FLUX 2 Dev",
-    description: "FLUX.2 dev — detailed, photorealistic renders at higher latency.",
-    badges: ["Photorealistic"],
-    priority: 3,
-    inputMode: "multipart",
-    params: MULTIPART_PARAMS,
-    bounds: MULTIPART_BOUNDS,
-    nativeSize: { width: 1024, height: 1024 },
-    maxImages: 4,
-    estimatedCost: 0,
-    declaredOutput: "application/json",
-  },
-  {
-    id: "@cf/bytedance/stable-diffusion-xl-lightning",
-    label: "SDXL Lightning",
-    description: "ByteDance SDXL Lightning — fast SDXL with negative prompt and seed control.",
-    badges: ["Fast", "Negative Prompt"],
-    priority: 4,
-    inputMode: "json",
-    params: SD_PARAMS,
-    bounds: SD_BOUNDS,
-    nativeSize: { width: 1024, height: 1024 },
-    steps: SD_STEPS,
-    guidance: SD_GUIDANCE,
-    maxImages: 4,
-    estimatedCost: 0,
-    // Declares PNG but returns JPEG bytes — the parser sniffs the real format.
-    declaredOutput: "image/png",
-  },
-  {
-    id: "@cf/black-forest-labs/flux-2-klein-4b",
-    label: "FLUX 2 Klein 4B",
-    description: "Smaller FLUX.2 Klein — lower latency than the 9B variant.",
-    badges: ["Fast"],
-    priority: 5,
-    inputMode: "multipart",
-    params: MULTIPART_PARAMS,
-    bounds: MULTIPART_BOUNDS,
-    nativeSize: { width: 1024, height: 1024 },
-    maxImages: 4,
-    estimatedCost: 0,
-    declaredOutput: "application/json",
-  },
-  {
-    id: "@cf/leonardo/lucid-origin",
-    label: "Lucid Origin",
-    description: "Leonardo Lucid Origin — crisp graphic design, text, and illustration.",
-    badges: ["Illustration"],
-    priority: 6,
-    inputMode: "json",
-    params: ["prompt", "guidance", "seed", "height", "width", "num_steps", "steps"],
-    bounds: {
-      width: { min: 256, max: 2500 },
-      height: { min: 256, max: 2500 },
-      num_steps: { min: 1, max: 40 },
-      steps: { min: 1, max: 40 },
-      guidance: { min: 0, max: 10 },
-      seed: { min: 0 },
-    },
-    nativeSize: { width: 1120, height: 1120 },
-    steps: { param: "num_steps", byQuality: { fast: 10, balanced: 20, high: 40 } },
-    guidance: { byQuality: { fast: 3, balanced: 4.5, high: 7 } },
-    maxImages: 4,
-    estimatedCost: 0,
-    declaredOutput: "application/json",
-  },
-  {
-    id: "@cf/leonardo/phoenix-1.0",
-    label: "Leonardo Phoenix",
-    description: "Leonardo Phoenix 1.0 — stylised imagery with negative prompt support.",
-    badges: ["Illustration", "Negative Prompt"],
-    priority: 7,
-    inputMode: "json",
-    params: ["prompt", "guidance", "seed", "height", "width", "num_steps", "negative_prompt"],
-    bounds: {
-      width: { min: 256, max: 2048 },
-      height: { min: 256, max: 2048 },
-      num_steps: { min: 1, max: 50 },
-      guidance: { min: 2, max: 10 },
-      seed: { min: 0 },
-    },
-    nativeSize: { width: 1024, height: 1024 },
-    steps: { param: "num_steps", byQuality: { fast: 12, balanced: 25, high: 50 } },
-    guidance: { byQuality: { fast: 2, balanced: 4, high: 7 } },
-    maxImages: 4,
-    estimatedCost: 0,
-    declaredOutput: "image/jpeg",
-  },
-  {
-    id: "@cf/stabilityai/stable-diffusion-xl-base-1.0",
-    label: "SDXL Base",
-    description: "Stability AI SDXL 1.0 — dependable general-purpose diffusion baseline.",
-    badges: ["Balanced", "Negative Prompt"],
-    priority: 8,
-    inputMode: "json",
-    params: SD_PARAMS,
-    bounds: SD_BOUNDS,
-    nativeSize: { width: 1024, height: 1024 },
-    steps: SD_STEPS,
-    guidance: SD_GUIDANCE,
-    maxImages: 4,
-    estimatedCost: 0,
-    declaredOutput: "image/png",
-  },
-  {
-    id: "@cf/lykon/dreamshaper-8-lcm",
-    label: "DreamShaper 8 LCM",
-    description: "Lykon DreamShaper 8 LCM — stylised art at very low step counts.",
-    badges: ["Fast", "Stylised"],
-    priority: 9,
-    inputMode: "json",
-    params: SD_PARAMS,
-    bounds: SD_BOUNDS,
-    nativeSize: { width: 1024, height: 1024 },
-    steps: SD_STEPS,
-    guidance: SD_GUIDANCE,
-    maxImages: 4,
-    estimatedCost: 0,
-    declaredOutput: "image/png",
   },
 ];
 
 /** Every registered model, in fallback order. */
 export const IMAGE_MODEL_REGISTRY: readonly ImageModelRegistryEntry[] = Object.freeze(
-  // Entries without an explicit provider are retired legacy definitions. Keeping
-  // them above temporarily preserves git history while ensuring they cannot be
-  // routed, displayed, or accepted by the API.
-  [...REGISTRY_ENTRIES]
-    .filter((entry) => entry.provider !== undefined)
-    .sort((a, b) => a.priority - b.priority),
+  [...REGISTRY_ENTRIES].sort((a, b) => a.priority - b.priority),
 );
 
 /** Cached metadata lookups so hot paths never rescan the registry. */
@@ -449,10 +239,10 @@ export function getImageModelLabel(id?: string | null): string {
   return BY_ID.get(id)?.label ?? id;
 }
 
-/** Provider ownership comes from the registry; legacy entries are Cloudflare. */
+/** Provider ownership comes only from the registry. */
 export function getImageModelProvider(id: string): ImageProviderId | undefined {
   const entry = BY_ID.get(id);
-  return entry ? (entry.provider ?? "cloudflare") : undefined;
+  return entry?.provider;
 }
 
 /** The parameter allow-list for a model, as a cached `Set`. */
@@ -502,11 +292,7 @@ export interface FallbackChainOptions {
 }
 
 /**
- * Build the ordered Cloudflare-only fallback chain for one request.
- *
- * The chain is always: requested model → configured default → registry priority
- * order, de-duplicated. It can never contain a non-Cloudflare provider because
- * the registry only holds Cloudflare models.
+ * Build the ordered, provider-aware fallback chain for one request.
  */
 export function buildFallbackChain(options: FallbackChainOptions = {}): ImageModelRegistryEntry[] {
   const { requested, preferred, isSelectable } = options;

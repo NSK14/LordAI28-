@@ -2,7 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
-import { reloadServerEnv } from "./lib/env.server";
+import { getServerEnvironmentDiagnostics, reloadServerEnv } from "./lib/env.server";
 import { logProviderConfigurationDiagnostics } from "./lib/ai-gateway.server";
 
 type ServerEntry = {
@@ -47,6 +47,18 @@ console.info(
 for (const warning of envReport.warnings) {
   console.warn(`[env] ${warning}`);
 }
+const missingServerEnvironment = getServerEnvironmentDiagnostics()
+  .filter((entry) => !entry.exists)
+  .map((entry) => entry.name);
+console.info(
+  JSON.stringify({
+    event: "server_environment_diagnostics",
+    configured: getServerEnvironmentDiagnostics()
+      .filter((entry) => entry.exists)
+      .map((entry) => entry.name),
+    missing: missingServerEnvironment,
+  }),
+);
 
 console.info(
   JSON.stringify({

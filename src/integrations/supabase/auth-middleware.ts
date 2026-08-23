@@ -32,11 +32,11 @@ async function getAuthenticatedSupabase(request: Request) {
   // Try to get user from Authorization header first
   const authHeader = request.headers.get("authorization");
   if (authHeader) {
-    if (!authHeader.startsWith("Bearer ")) {
+    if (!/^Bearer\s+/i.test(authHeader)) {
       throw new Error("Unauthorized: Only Bearer tokens are supported");
     }
 
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     if (!token) {
       throw new Error("Unauthorized: No token provided");
     }
@@ -122,8 +122,13 @@ export const requireSupabaseRequestAuth = createMiddleware({ type: "request" }).
         context: authContext,
       });
     } catch (error) {
-      console.error("ERROR", error);
-      console.error("STACK TRACE", error instanceof Error ? error.stack : undefined);
+      console.warn(
+        JSON.stringify({
+          event: "auth_failed",
+          path,
+          reason: error instanceof Error ? error.message : "Authentication failed",
+        }),
+      );
       // Request middleware is used by JSON API routes. Returning a response
       // here prevents auth failures from escaping into the global HTML error
       // boundary and turning an expected 401 into a misleading 500 page.

@@ -5,6 +5,7 @@
 // the only image provider LORD ships, so this facade exposes a single provider.
 
 import { supabase } from "@/integrations/supabase/client";
+import { authenticatedFetch } from "@/lib/authenticated-fetch";
 import type {
   ImageGenerationSuccessBody,
   ImageModelsBody,
@@ -52,7 +53,7 @@ export type GenerateImageResult = ImageGenerationSuccessBody & {
 };
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authenticatedFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -79,7 +80,7 @@ export const ImageService = {
   },
 
   async getModels(): Promise<ImageModelsBody> {
-    const res = await fetch("/api/images/models", { method: "GET" });
+    const res = await authenticatedFetch("/api/images/models", { method: "GET" });
     const data = await res.json();
     if (!res.ok || data.success === false) {
       throw new Error(data?.error ?? "Could not load image models.");

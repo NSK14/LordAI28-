@@ -295,30 +295,30 @@ export const LORD_MODELS: Record<LordMode, readonly Candidate[]> = {
   // 💬 Best everyday assistant
   balanced: [
     candidate("gemini", "gemini-2.5-flash"),
-    candidate("openai", "gpt-4o-mini"),
+    candidate("openai", "gpt-4o"),
     candidate("openrouter", "google/gemma-4-31b-it:free"),
   ],
 
   // 🧠 Strong reasoning
   reasoning: [
-    candidate("gemini", "gemini-2.5-flash"),
     candidate("openai", "gpt-4o"),
+    candidate("gemini", "gemini-2.5-flash"),
     candidate("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
     candidate("openrouter", "openai/gpt-oss-20b:free"),
   ],
 
   // 💻 Coding
   coding: [
-    candidate("gemini", "gemini-2.5-flash"),
     candidate("openai", "gpt-4o"),
+    candidate("gemini", "gemini-2.5-flash"),
     candidate("openrouter", "openai/gpt-oss-20b:free"),
     candidate("openrouter", "google/gemma-4-31b-it:free"),
   ],
 
   // ✍️ Writing & creativity
   creative: [
-    candidate("gemini", "gemini-2.5-flash"),
     candidate("openai", "gpt-4o"),
+    candidate("gemini", "gemini-2.5-flash"),
     candidate("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
     candidate("openrouter", "poolside/laguna-m-1:free"),
   ],
@@ -447,21 +447,19 @@ export function validateModelId(
 export function buildAllCandidates(): Candidate[] {
   const seen = new Set<string>();
   const out: Candidate[] = [];
-  for (const mode of Object.keys(LORD_MODELS) as LordMode[]) {
-    for (const c of LORD_MODELS[mode]) {
-      const key = `${c.provider}:${c.modelId}`;
+  for (const provider of ["gemini", "openai", "openrouter"] as const) {
+    for (const modelId of PROVIDER_CONFIG[provider].models) {
+      const key = `${provider}:${modelId}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push(c);
+      out.push({ provider, modelId });
     }
   }
   return out;
 }
 
-// Resolve a bare model id to the provider that owns it. An explicit provider
-// tag is always preferred; otherwise we match against the known candidate
-// registry. OpenRouter-style prefix matching is retained only for IDs that
-// follow the `vendor/model` pattern.
+// Resolve a model id only through the typed registry. Provider ownership is
+// never inferred from an id's punctuation or vendor prefix.
 export function resolveProvider(
   modelId: string,
   explicitProvider?: ProviderName,
@@ -470,25 +468,18 @@ export function resolveProvider(
   for (const c of buildAllCandidates()) {
     if (c.modelId === modelId) return c.provider;
   }
-  if (modelId.includes("/")) {
-    return "openrouter";
-  }
   return null;
 }
 
-// Resolve a bare model id to a full Candidate. Prefers an explicit provider,
-// then matches against the known candidate registry, then treats known
-// provider prefixes as OpenRouter/legacy ids.
+// Resolve a model id to a full Candidate through the known registry.
 export function resolveCandidate(
   modelId: string,
   explicitProvider?: ProviderName,
 ): Candidate | null {
-  if (explicitProvider) return { provider: explicitProvider, modelId };
-  const known = buildAllCandidates().find((c) => c.modelId === modelId);
+  const known = buildAllCandidates().find(
+    (c) => c.modelId === modelId && (!explicitProvider || c.provider === explicitProvider),
+  );
   if (known) return known;
-  if (modelId.includes("/")) {
-    return { provider: "openrouter", modelId };
-  }
   return null;
 }
 
@@ -511,9 +502,8 @@ export function getModeCandidates(
           ),
         ]
       : [...base];
-  const list = explicitModelId
-    ? [{ provider: preferredProvider ?? "openrouter", modelId: explicitModelId }, ...ordered]
-    : ordered;
+  const explicit = explicitModelId ? resolveCandidate(explicitModelId, preferredProvider) : null;
+  const list = explicit ? [explicit, ...ordered] : ordered;
   const seen = new Set<string>();
   const out: Candidate[] = [];
   for (const c of list) {
@@ -618,6 +608,7 @@ export interface ModelErrorClassification {
 }
 
 export interface ModelAttempt {
+  provider: ProviderName;
   model: string;
   status: number;
   reason: string;

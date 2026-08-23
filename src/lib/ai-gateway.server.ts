@@ -34,6 +34,13 @@ import { createHealthCache, type HealthCacheEntry, type HealthCache } from "./pr
 import { createCircuitBreaker, type CircuitBreaker } from "./circuit-breaker";
 import { createModelStatsStore, type ModelStatsStore } from "./model-stats";
 import { createLogger, type Logger } from "./gateway-logger";
+import {
+  createProviderHealthManager,
+  createRequestRoutingContext,
+  failureKindFromClassification,
+  type ProviderHealthManager,
+  type RequestRoutingContext,
+} from "./ai/providers";
 import { OPENROUTER_DEFAULT_MODEL } from "./openrouter-provider";
 import {
   ensureServerEnvLoaded,
@@ -690,6 +697,8 @@ export function getConfiguredProviders(): ProviderName[] {
 // ---------------------------------------------------------------------------
 
 export interface GatewayInfrastructure {
+  /** The single source of truth for provider health, cooldowns, and the circuit breaker. */
+  providerHealth: ProviderHealthManager;
   healthCache: HealthCache;
   circuitBreaker: CircuitBreaker;
   modelStats: ModelStatsStore;
@@ -702,6 +711,11 @@ export function getGatewayInfrastructure(logger?: Logger): GatewayInfrastructure
   if (!sharedInfrastructure) {
     const resolvedLogger = logger ?? createLogger(GATEWAY_CONFIG);
     sharedInfrastructure = {
+      // The `ProviderHealthManager` is the authoritative gate used by routing.
+      // It owns cooldowns (Phase 2), the circuit breaker (Phase 4) and the
+      // in-memory skip cache (Phase 6); the legacy per-model caches below are
+      // retained only for the admin dashboard's fine-grained model view.
+      providerHealth: createProviderHealthManager(),
       healthCache: createHealthCache({
         defaultTtlMs: GATEWAY_CONFIG.healthCacheDefaultTtlMs,
         ttlByStatus: GATEWAY_CONFIG.healthCacheTtlByStatus,
@@ -1045,12 +1059,16 @@ export class AllProvidersFailedError extends Error {
 //   1. every configured provider is represented, by appending its remaining
 //      models after the mode list — a provider is never skipped just because
 //      the single model it contributes to this mode is unavailable;
-//   2. candidates that are currently unhealthy or circuit-broken are deferred
-//      to the end instead of being dropped, so "all providers failed" can only
-//      be reported after each provider has genuinely been contacted.
+//   2. a candidate is REMOVED (not merely deferred) whenever its provider is in
+//      cooldown, has an open circuit, is unconfigured, or has already failed in
+//      this request. This is what makes "a provider is never retried after a
+//      429 within the same request" a hard guarantee — a 429 puts the provider
+//      into cooldown at the single source of truth (ProviderHealthManager), so
+//      it cannot appear again in this request's plan.
 function buildRoutingPlan(
   opts: StreamWithFallbackOptions,
   infra: GatewayInfrastructure,
+  context: RequestRoutingContext,
 ): { plan: Candidate[]; deferred: Set<string>; configuredProviders: ProviderName[] } {
   const { mode, state } = opts;
   const resolvedExplicit = opts.explicitModelId ? resolveCandidate(opts.explicitModelId) : null;
@@ -1063,19 +1081,22 @@ function buildRoutingPlan(
     resolvedExplicit?.modelId,
   ).filter((c) => hasKey(c.provider));
 
-  // Dynamic routing: sort the mode's candidates by health and performance.
+  // Dynamic routing: sort the mode's candidates by the health manager's view
+  // (lowest latency -> highest success rate -> fewest recent failures). This is
+  // a pure ranking over cached health, so it adds no network calls.
   if (GATEWAY_CONFIG.dynamicRoutingEnabled && !opts.explicitModelId) {
     modeCandidates.sort((a, b) => {
-      const statsA = infra.modelStats.getStats(a.provider, a.modelId);
-      const statsB = infra.modelStats.getStats(b.provider, b.modelId);
-      const failureRateA = statsA.requests > 0 ? statsA.failures / statsA.requests : 0;
-      const failureRateB = statsB.requests > 0 ? statsB.failures / statsB.requests : 0;
-      const avgTTFTA = statsA.successes > 0 ? statsA.totalTTFTMs / statsA.successes : Infinity;
-      const avgTTFTB = statsB.successes > 0 ? statsB.totalTTFTMs / statsB.successes : Infinity;
-
-      if (failureRateA !== failureRateB) return failureRateA - failureRateB;
-      if (avgTTFTA !== avgTTFTB) return avgTTFTA - avgTTFTB;
-      return 0;
+      const ra = infra.providerHealth.get(a.provider);
+      const rb = infra.providerHealth.get(b.provider);
+      const latA = infra.providerHealth.effectiveLatencyMs(a.provider);
+      const latB = infra.providerHealth.effectiveLatencyMs(b.provider);
+      const failA = ra.failureCount;
+      const failB = rb.failureCount;
+      const rateA = ra.successRate;
+      const rateB = rb.successRate;
+      if (failA !== failB) return failA - failB;
+      if (rateA !== rateB) return rateB - rateA;
+      return latA - latB;
     });
   }
 
@@ -1094,21 +1115,46 @@ function buildRoutingPlan(
 
   const ordered = [...modeCandidates, ...providerCompletion];
   const usable: Candidate[] = [];
-  const deferredCandidates: Candidate[] = [];
   const deferred = new Set<string>();
 
   for (const candidate of ordered) {
-    const circuitOpen = infra.circuitBreaker.isOpen(candidate.provider, candidate.modelId);
-    const healthy = infra.healthCache.isHealthy(candidate.provider, candidate.modelId);
-    if (circuitOpen || !healthy) {
-      deferredCandidates.push(candidate);
+    const provider = candidate.provider;
+    // `state.meta[provider].hasKey` is the authority for "is this provider
+    // usable right now" (set by `createLordProviders` from the real env). Only
+    // providers with a key are eligible; everything else is dropped outright.
+    if (!state.meta[provider]?.hasKey) continue;
+
+    // Per-request guarantee: never retry a provider that already failed here.
+    const requestSkip = context.getSkip(provider);
+    if (requestSkip) {
       deferred.add(candidateKey(candidate));
-    } else {
-      usable.push(candidate);
+      continue;
     }
+    // Single source of truth: the health manager owns cooldown + circuit state.
+    // A cooldown-capable failure (e.g. 429) disables the provider for the rest
+    // of this request, so it cannot be re-tried within the same request. A
+    // cooldown triggered *by this request* is ignored here (the per-request
+    // context already blocks the re-try); cross-request cooldowns still block.
+    const managerSkip = infra.providerHealth.getSkip(provider, {
+      requestStartedAt: routingContext.requestStartedAt,
+    });
+    if (managerSkip) {
+      deferred.add(candidateKey(candidate));
+      continue;
+    }
+    // Legacy per-model guards, kept for the admin view's granularity.
+    if (infra.circuitBreaker.isOpen(provider, candidate.modelId)) {
+      deferred.add(candidateKey(candidate));
+      continue;
+    }
+    if (!infra.healthCache.isHealthy(provider, candidate.modelId)) {
+      deferred.add(candidateKey(candidate));
+      continue;
+    }
+    usable.push(candidate);
   }
 
-  return { plan: [...usable, ...deferredCandidates], deferred, configuredProviders };
+  return { plan: usable, deferred, configuredProviders };
 }
 
 function buildProviderStatuses(
@@ -1154,21 +1200,24 @@ export async function findFirstWorkingModel(opts: StreamWithFallbackOptions): Pr
   const { mode, requestId, state } = opts;
   const infra = getGatewayInfrastructure();
   const logger = infra.logger;
-  const { plan, deferred, configuredProviders } = buildRoutingPlan(opts, infra);
+  // Per-request context: the hard guarantee that a provider which fails in this
+  // request is never contacted again for the remainder of it (Phase 3).
+  const routingContext = createRequestRoutingContext(requestId);
+  const { plan, deferred, configuredProviders } = buildRoutingPlan(opts, infra, routingContext);
   const candidates = plan;
 
   const modeLabel = LORD_MODE_LABELS[mode];
   const probeStart = performance.now();
 
   // Fast-path: if we have a fresh cache hit for this mode and its provider is
-  // still healthy + configured, use it directly (unless an explicit modelId was
-  // requested, in which case we must probe it).
+  // still healthy + configured + not in cooldown, use it directly (unless an
+  // explicit modelId was requested, in which case we must probe it).
   const cached = opts.explicitModelId ? null : getCachedCandidate(mode);
   if (cached && !opts.explicitModelId) {
     const stillConfigured =
       state.meta[cached.provider]?.hasKey &&
-      !infra.circuitBreaker.isOpen(cached.provider, cached.model) &&
-      infra.healthCache.isHealthy(cached.provider, cached.model);
+      infra.providerHealth.isAvailable(cached.provider) &&
+      routingContext.getSkip(cached.provider) === null;
     if (stillConfigured) {
       logGateway(logger, "ai_probe_cache_hit", {
         requestId,
@@ -1246,6 +1295,7 @@ export async function findFirstWorkingModel(opts: StreamWithFallbackOptions): Pr
     // Skip candidates whose provider has no valid key configured.
     if (!state.meta[provider]?.hasKey) {
       recordAttempt(provider, {
+        provider,
         model: modelId,
         status: 0,
         reason: GATEWAY_CONFIG.errorReasonLabels.missing_api_key,
@@ -1285,6 +1335,7 @@ export async function findFirstWorkingModel(opts: StreamWithFallbackOptions): Pr
                 provider) as ProviderName)
             : provider;
         const attempt: ModelAttempt = {
+          provider,
           model: modelId,
           status: classification.status ?? 0,
           reason: GATEWAY_CONFIG.errorReasonLabels[classification.reason] ?? classification.reason,
@@ -1331,6 +1382,17 @@ export async function findFirstWorkingModel(opts: StreamWithFallbackOptions): Pr
           ttftMs: 0,
           streamMs: 0,
           reason: attempt.reason,
+        });
+
+        // Record the failure at the single source of truth. A cooldown-capable
+        // failure (e.g. 429) immediately disables this provider for the rest of
+        // the request via `buildRoutingPlan`, so it is never re-tried here.
+        infra.providerHealth.recordFailure(errProvider, {
+          kind: failureKindFromClassification(classification),
+          status: classification.status,
+          message: classification.providerMessage ?? attempt.reason,
+          model: errProvider === provider ? modelId : undefined,
+          latencyMs: 0,
         });
 
         // Authentication failure (401/403, or Gemini's 400 API_KEY_INVALID):
@@ -1381,6 +1443,7 @@ export async function findFirstWorkingModel(opts: StreamWithFallbackOptions): Pr
       // Success: cache this candidate as the preferred choice for this mode.
       setCachedCandidate(mode, { provider, model: modelId, ts: Date.now() });
       infra.circuitBreaker.recordSuccess(provider, modelId);
+      infra.providerHealth.recordSuccess(provider, { model: modelId });
       infra.healthCache.set({
         provider,
         model: modelId,
@@ -1517,6 +1580,12 @@ export async function streamWithFallback(
           : provider;
       infra.circuitBreaker.recordFailure(errProvider, modelId);
       const classification = classifyModelError(error);
+      infra.providerHealth.recordFailure(errProvider, {
+        kind: failureKindFromClassification(classification),
+        status: classification.status,
+        message: classification.providerMessage,
+        model: modelId,
+      });
       infra.healthCache.set({
         provider: errProvider,
         model: modelId,
@@ -1549,6 +1618,7 @@ export async function streamWithFallback(
       const streamMs = firstChunkTime > 0 ? Math.round(streamEndTime - firstChunkTime) : 0;
       const cost = estimateCost(modelId, usage.inputTokens ?? 0, usage.outputTokens ?? 0);
       infra.circuitBreaker.recordSuccess(provider, modelId);
+      infra.providerHealth.recordSuccess(provider, { model: modelId });
       infra.healthCache.set({
         provider,
         model: modelId,
@@ -1771,6 +1841,9 @@ export function resetCircuitBreakers(): void {
   const infra = getGatewayInfrastructure();
   infra.circuitBreaker.resetAll();
   infra.healthCache.clear();
+  // The `ProviderHealthManager` is the authoritative cooldown/circuit source:
+  // reset it so a previous process' state is never inherited (tests, hot reload).
+  infra.providerHealth.reset();
   resetProbeCache();
   resetGatewayInfrastructure();
 }

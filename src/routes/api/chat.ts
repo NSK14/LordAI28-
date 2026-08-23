@@ -584,7 +584,18 @@ export const Route = createFileRoute("/api/chat")({
             allProvidersAttempted: routing?.allProvidersAttempted,
           });
 
-          return lordErrorResponse(httpStatus, lordError);
+          return lordErrorResponse(httpStatus, lordError, {
+            attempts: attempts?.map((attempt) => ({
+              provider: attempt.provider,
+              model: attempt.model,
+              status: attempt.status,
+              reason: attempt.reason,
+              retryable: attempt.retryable,
+              ...(attempt.providerMessage
+                ? { providerMessage: sanitizeProviderMessage(attempt.providerMessage) }
+                : {}),
+            })),
+          });
         }
       },
     },

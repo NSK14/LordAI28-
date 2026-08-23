@@ -8,6 +8,8 @@
 import { routeImageRequest } from "./image-router";
 import type { ImageGenerationRequest, ImageGenerationResult } from "./image-types";
 import { createStructuredLogger } from "../shared/structured-logger";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 
 const log = createStructuredLogger("image:service");
 
@@ -18,11 +20,7 @@ export async function generateImage(
   return routeImageRequest(request);
 }
 
-/** Minimal shape the service needs from the Supabase client (loose on purpose). */
-export interface ImageDbClient {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  from(table: string): any;
-}
+export type ImageDbClient = SupabaseClient<Database>;
 
 export interface PersistImageOptions {
   supabase: ImageDbClient;
@@ -35,6 +33,41 @@ export interface PersistResult {
   persisted: boolean;
   savedIds: string[];
   error?: string;
+}
+
+const IMAGE_BUCKET = "images";
+
+function dataUrlToUpload(url: string): { bytes: Uint8Array; contentType: string } {
+  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/.exec(url);
+  if (!match) throw new Error("Generated image is not a base64 data URL.");
+  return { bytes: Buffer.from(match[2], "base64"), contentType: match[1] };
+}
+
+function extensionFor(contentType: string): string {
+  const extension = contentType.split("/")[1]?.toLowerCase();
+  return extension === "jpeg" ? "jpg" : extension && /^[a-z0-9]+$/.test(extension) ? extension : "png";
+}
+
+async function uploadGeneratedImage(
+  supabase: ImageDbClient,
+  userId: string,
+  requestId: string,
+  index: number,
+  dataUrl: string,
+): Promise<{ path: string; publicUrl: string }> {
+  const { bytes, contentType } = dataUrlToUpload(dataUrl);
+  const path = `generated/${userId}/${requestId}-${index}.${extensionFor(contentType)}`;
+  const { error: uploadError } = await supabase.storage.from(IMAGE_BUCKET).upload(path, bytes, {
+    contentType,
+    upsert: false,
+  });
+  if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+  const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+  if (!data.publicUrl) {
+    await supabase.storage.from(IMAGE_BUCKET).remove([path]);
+    throw new Error("Storage did not return a public image URL.");
+  }
+  return { path, publicUrl: data.publicUrl };
 }
 
 /**
@@ -69,7 +102,7 @@ export async function persistImages(
     }
 
     for (let i = 0; i < result.images.length; i += 1) {
-      const imageUrl = result.images[i];
+      const uploaded = await uploadGeneratedImage(supabase, userId, result.requestId, i, result.images[i]);
       let messageId: string | null = null;
       if (conversationId) {
         const { data: message, error: messageError } = await supabase
@@ -79,13 +112,16 @@ export async function persistImages(
             user_id: userId,
             role: "assistant",
             message_type: "image",
-            content: imageUrl,
+            content: uploaded.publicUrl,
             model: result.model,
             project_id: projectId ?? null,
           })
           .select("id")
           .single();
-        if (messageError) return { persisted: false, savedIds, error: "Could not attach image." };
+        if (messageError) {
+          await supabase.storage.from(IMAGE_BUCKET).remove([uploaded.path]);
+          return { persisted: false, savedIds, error: "Could not attach image." };
+        }
         messageId = message.id;
       }
       const { data: row, error: recordError } = await supabase
@@ -103,7 +139,7 @@ export async function persistImages(
           width: result.width,
           height: result.height,
           seed: result.seed != null ? result.seed + i : null,
-          image_url: imageUrl,
+          image_url: uploaded.publicUrl,
           aspect_ratio: result.aspectRatio,
           queue_time_ms: result.queueTimeMs,
           generation_time_ms: result.generationTimeMs,
@@ -114,7 +150,11 @@ export async function persistImages(
         })
         .select("id")
         .single();
-      if (recordError) return { persisted: false, savedIds, error: "Could not save image." };
+      if (recordError) {
+        await supabase.storage.from(IMAGE_BUCKET).remove([uploaded.path]);
+        if (messageId) await supabase.from("messages").delete().eq("id", messageId);
+        return { persisted: false, savedIds, error: "Could not save image." };
+      }
       savedIds.push(row.id);
     }
 

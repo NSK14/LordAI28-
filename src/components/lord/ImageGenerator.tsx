@@ -144,16 +144,20 @@ export default function ImageGenerator({
     variant === "modal" ? "rounded-2xl bg-[#031426] p-6" : "hud-panel rounded-xl p-6";
 
   const modelOptions = useMemo(
-    () => IMAGE_MODEL_REGISTRY.map((m) => ({ id: m.id, label: m.label })),
+    () =>
+      IMAGE_MODEL_REGISTRY.filter((m) => m.provider === "cloudflare").map((m) => ({
+        id: m.id,
+        label: m.label,
+      })),
     [],
   );
 
   return (
     <div className={cardShell}>
-      {/* Provider badge (Cloudflare is the only provider) */}
+      {/* Cloudflare is primary; the server transparently uses OpenRouter if needed. */}
       <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
         <Sparkles className="h-4 w-4 text-[color:var(--hud)]" />
-        <span>Cloudflare Workers AI</span>
+        <span>Cloudflare Workers AI · automatic fallback enabled</span>
       </div>
 
       {/* Prompt */}

@@ -26,6 +26,14 @@ export const PROVIDER_ENV_KEYS = [
 ] as const;
 export type ProviderEnvKey = (typeof PROVIDER_ENV_KEYS)[number];
 
+/** Server integrations required for a fully configured production deployment. */
+export const SERVER_REQUIRED_ENV_KEYS = [
+  ...PROVIDER_ENV_KEYS,
+  "SUPABASE_URL",
+  "SUPABASE_ANON_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY",
+] as const;
+
 /** Client-exposed aliases that must never hold a provider secret. */
 const CLIENT_LEAK_ENV_KEYS = [
   "VITE_GEMINI_API_KEY",
@@ -103,6 +111,10 @@ export function summarizeEnvKey(name: string): EnvKeySummary {
 
 export function getProviderEnvSummaries(): EnvKeySummary[] {
   return PROVIDER_ENV_KEYS.map((key) => summarizeEnvKey(key));
+}
+
+export function getServerEnvironmentDiagnostics(): EnvKeySummary[] {
+  return SERVER_REQUIRED_ENV_KEYS.map((key) => summarizeEnvKey(key));
 }
 
 // ---------------------------------------------------------------------------

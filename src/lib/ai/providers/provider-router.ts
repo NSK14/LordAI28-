@@ -176,6 +176,8 @@ export interface RequestProviderFailure {
  */
 export interface RequestRoutingContext {
   readonly requestId: string;
+  /** Epoch ms the request began; used to distinguish in-request cooldowns. */
+  readonly requestStartedAt: number;
   /** Mark that we are about to contact this provider/model. */
   markAttempt(provider: ProviderId, model?: string): void;
   /** Record a failure; returns true when the provider is now excluded. */
@@ -198,6 +200,7 @@ export function createRequestRoutingContext(
   options: { now?: () => number } = {},
 ): RequestRoutingContext {
   const now = options.now ?? Date.now;
+  const requestStartedAt = now();
   const attemptedProviders: ProviderId[] = [];
   const attemptedPairs = new Set<string>();
   const exhausted = new Map<ProviderId, RequestProviderFailure>();
@@ -248,6 +251,7 @@ export function createRequestRoutingContext(
           failure.status ? ` ${failure.status}` : ""
         }); not retried`,
         kind: failure.kind,
+        requestStartedAt,
       };
     },
   };

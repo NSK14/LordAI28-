@@ -129,6 +129,7 @@ export async function routeImageRequest(
 
   const configuredModel = resolveConfiguredModelId(process.env.CLOUDFLARE_IMAGE_MODEL).id;
   const allCandidates = buildFallbackChain({
+    requested: requestedModel,
     preferred: configuredModel,
     isSelectable: selectableFilter(),
   });
@@ -214,7 +215,7 @@ export async function routeImageRequest(
     throw allModelsUnavailableError();
   }
 
-  const queueTimeMs = queueStart - Date.now();
+  const queueTimeMs = Date.now() - queueStart;
   const generationTimeMs = attempts.filter((a) => a.ok).reduce((sum, a) => sum + a.durationMs, 0);
   const fallbackUsed = usedModel !== effectiveRequested;
   const fallbackCount = chain.findIndex((e) => e.id === usedModel);
