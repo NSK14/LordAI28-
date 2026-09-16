@@ -7,7 +7,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type ReactNode, useState } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -15,6 +15,31 @@ import { WakeWordProvider } from "../components/lord/WakeWordProvider";
 import { AppContextProvider } from "../components/lord/AppContextProvider";
 import { CalendarProvider } from "../components/lord/CalendarProvider";
 import { setupApiInterceptor } from "../lib/api-interceptor";
+import { getUserSettings } from "../lib/user-settings.functions";
+import { useQuery } from "@tanstack/react-query";
+import { DEFAULT_MODE, type LordMode } from "../lib/modes";
+
+// Initialize global monitoring
+if (typeof window !== "undefined") {
+  setupApiInterceptor();
+}
+
+function UserSettingsHydrator({ children }: { children: ReactNode }) {
+  const { data: userSettings } = useQuery({
+    queryKey: ["user_settings"],
+    queryFn: getUserSettings,
+  });
+
+  const voiceMode: LordMode = (userSettings?.default_mode as LordMode) ?? DEFAULT_MODE;
+  const autoSpeak = userSettings?.auto_speak ?? true;
+  const voiceRate = userSettings?.voice_rate ?? 1;
+
+  return (
+    <WakeWordProvider mode={voiceMode} autoSpeak={autoSpeak} voiceRate={voiceRate}>
+      {children}
+    </WakeWordProvider>
+  );
+}
 
 // Initialize global monitoring
 if (typeof window !== "undefined") {
@@ -182,10 +207,10 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AppContextProvider>
         <CalendarProvider>
-          <WakeWordProvider>
+          <UserSettingsHydrator>
             {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
             <Outlet />
-          </WakeWordProvider>
+          </UserSettingsHydrator>
         </CalendarProvider>
       </AppContextProvider>
     </QueryClientProvider>

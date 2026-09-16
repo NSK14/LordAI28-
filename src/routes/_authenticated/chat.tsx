@@ -29,6 +29,7 @@ import { useCalendar } from "@/components/lord/CalendarProvider";
 import { DEFAULT_MODE, type LordMode } from "@/lib/modes";
 import { usePersistedState } from "@/lib/use-persisted-state";
 import { tokenUsageStore, type TokenUsageEvent } from "@/lib/token-usage-store";
+import { getUserSettings } from "@/lib/user-settings.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { getApiBaseUrl } from "@/lib/api-config";
 import { getSupabaseAuthHeaders } from "@/lib/authenticated-fetch";
@@ -169,6 +170,19 @@ function ChatPage() {
   const calendar = useCalendar();
 
   const [mode, setMode] = usePersistedState<LordMode>("chat-mode", DEFAULT_MODE);
+  const { data: userSettings } = useQuery({
+    queryKey: ["user_settings"],
+    queryFn: getUserSettings,
+  });
+
+  useEffect(() => {
+    if (!userSettings?.default_mode) return;
+    const stored = (typeof window !== "undefined" ? localStorage.getItem("chat-mode") : null) as
+      string | null;
+    if (!stored) {
+      setMode(userSettings.default_mode as LordMode);
+    }
+  }, [userSettings, setMode]);
   const [input, setInput] = useState("");
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [imagePrompt, setImagePrompt] = useState("");

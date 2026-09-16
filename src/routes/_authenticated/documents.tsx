@@ -20,6 +20,7 @@ import { AppShell } from "@/components/lord/AppShell";
 import { HudPanel } from "@/components/lord/HudPanel";
 import { getApiBaseUrl } from "@/lib/api-config";
 import { authenticatedFetch } from "@/lib/authenticated-fetch";
+import { streamTextLines } from "@/lib/stream-text-lines";
 import {
   startResearchSession,
   addDocumentToSession,
@@ -151,32 +152,7 @@ function DocsPage() {
           messages: [{ id: "u", role: "user", parts: [{ type: "text", text: taskPrompt }] }],
         }),
       });
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let acc = "";
-      let buf = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() ?? "";
-        for (const line of lines) {
-          const t = line.trim();
-          if (!t.startsWith("data:")) continue;
-          const payload = t.slice(5).trim();
-          if (!payload || payload === "[DONE]") continue;
-          try {
-            const o = JSON.parse(payload);
-            if (o.type === "text-delta" && typeof o.delta === "string") {
-              acc += o.delta;
-              setOutput(acc);
-            }
-          } catch {
-            /* */
-          }
-        }
-      }
+      await streamTextLines(res, (acc) => setOutput(acc));
     } catch {
       setOutput("Connection error.");
     } finally {

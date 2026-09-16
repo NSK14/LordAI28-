@@ -1,20 +1,116 @@
-// Backend-owned model configuration. The frontend never sees model ids — it only
-// knows about capability `LordMode`s. The backend owns provider selection and
-// automatic fallback.
-//
-// A `Candidate` pairs a provider with the model id understood by that
-// provider. This makes routing deterministic (no fragile string-prefix guessing)
-// and lets every provider be configured in one place.
 import { z } from "zod";
 
-export type ProviderName = "gemini" | "openrouter" | "openai" | "cloudflare";
-export type ModelCapability = "chat" | "image";
+// ===========================================================================
+// SECTION 1 — Core Types
+// ===========================================================================
+
+export type ProviderName = "openrouter" | "cloudflare" | "gemini" | "openai";
+
+export type ModelType = "chat" | "image";
+
+export type LordMode = "fast" | "balanced" | "coding" | "creative" | "reasoning" | "local";
 
 export interface Candidate {
   provider: ProviderName;
   modelId: string;
 }
 
+export interface ChatModelCapabilities {
+  supportsStreaming: boolean;
+  supportsFunctionCalling: boolean;
+  supportsVision: boolean;
+  supportsReasoning: boolean;
+  supportsSystemPrompt: boolean;
+  maxContextTokens: number;
+  maxOutputTokens: number;
+}
+
+export interface ImageModelCapabilities {
+  supportsGeneration: boolean;
+  supportsEditing: boolean;
+  supportsVariation: boolean;
+  supportsTransparentBackground: boolean;
+  supportsStreaming: boolean;
+  supportsNegativePrompt: boolean;
+  supportsAspectRatio: boolean;
+  supportsSeed: boolean;
+  supportsQuality: boolean;
+  supportsResolution: boolean;
+  supportsUpscaling: boolean;
+  maxImagesPerRequest: number;
+  maxImages: number;
+}
+
+export interface ChatModelLimits {
+  maxContextTokens: number;
+  maxOutputTokens: number;
+  maxImagesPerRequest: number;
+  maxImages: number;
+}
+
+export interface ImageModelLimits {
+  maxWidth: number;
+  maxHeight: number;
+  maxImagesPerRequest: number;
+  maxImages: number;
+}
+
+export interface ModelPricing {
+  inputPer1MTokens: number;
+  outputPer1MTokens: number;
+  estimatedPricePerImage?: number;
+  currency: "USD";
+}
+
+export interface ModelMetadata {
+  badges: readonly string[];
+  tags: readonly string[];
+  priority: number;
+  enabled: boolean;
+  addedAt: string;
+  notes?: string;
+}
+
+export interface ChatModelEntry {
+  id: string;
+  provider: ProviderName;
+  type: "chat";
+  label: string;
+  description: string;
+  enabled: boolean;
+  supports: readonly ModelType[];
+  capabilities: ChatModelCapabilities;
+  limits: ChatModelLimits;
+  pricing: ModelPricing;
+  metadata: ModelMetadata;
+}
+
+export interface ImageModelEntry {
+  id: string;
+  provider: ProviderName;
+  type: "image";
+  label: string;
+  description: string;
+  enabled: boolean;
+  supports: readonly ModelType[];
+  capabilities: ImageModelCapabilities;
+  limits: ImageModelLimits;
+  pricing: ModelPricing;
+  metadata: ModelMetadata;
+}
+
+export type AIModel = ChatModelEntry | ImageModelEntry;
+
+export interface ProviderConfigEntry {
+  apiKeyEnv: string;
+  models: readonly string[];
+}
+
+export interface ProviderConfig {
+  [provider: string]: ProviderConfigEntry;
+}
+
+// Legacy shape preserved for downstream consumers.
 export interface ImageModelDefinition {
   id: string;
   provider: ProviderName;
@@ -24,39 +120,53 @@ export interface ImageModelDefinition {
   badges: readonly string[];
   maxWidth: number;
   maxHeight: number;
-  /** USD estimate per generation; providers may vary this by resolution. */
   estimatedPrice: number;
   capabilities: ImageModelCapabilities;
 }
 
-export interface ImageModelCapabilities {
-  supportsGeneration: boolean;
-  supportsEditing: boolean;
-  supportsVariation: boolean;
-  supportsTransparentBackground: boolean;
-  supportsStreaming: boolean;
-  /**
-   * True only when the provider exposes a real negative-prompt parameter.
-   * No OpenRouter image model does today, so the gateway folds a negative
-   * prompt into the prompt text instead of silently dropping it.
-   */
-  supportsNegativePrompt: boolean;
-  supportsAspectRatio: boolean;
-  supportsSeed: boolean;
-  /** True when the provider accepts a `quality` parameter. */
-  supportsQuality: boolean;
-  /** True when the provider accepts a `resolution` tier parameter. */
-  supportsResolution: boolean;
-  supportsUpscaling: boolean;
-  /** Highest `n` the provider accepts in a single request. */
-  maxImagesPerRequest: number;
-  /** Highest number of images this app will produce for one user request. */
-  maxImages: number;
+export interface ModelRegistryEntry {
+  id: string;
+  label: string;
+  provider: string;
+  description?: string;
+  supports: readonly ModelType[];
+  maxResolution?: { width: number; height: number };
+  estimatedPrice?: number;
+  badges?: readonly string[];
 }
 
-// Baseline shared by every registered image model. Each entry below overrides
-// the parts that its provider actually supports; `validateImageModelsAtStartup`
-// re-verifies all of it against the live OpenRouter catalog and reports drift.
+// ===========================================================================
+// SECTION 2 — Provider Definitions
+// ===========================================================================
+
+const PROVIDER_API_KEY_ENV: Record<ProviderName, string> = {
+  openrouter: "OPENROUTER_API_KEY",
+  cloudflare: "CLOUDFLARE_API_TOKEN",
+  gemini: "GEMINI_API_KEY",
+  openai: "OPENAI_API_KEY",
+};
+
+const PROVIDER_LABELS: Record<ProviderName, string> = {
+  openrouter: "OpenRouter",
+  cloudflare: "Cloudflare",
+  gemini: "Google",
+  openai: "OpenAI",
+};
+
+// ===========================================================================
+// SECTION 3 — Model Registry (single source of truth)
+// ===========================================================================
+
+const STANDARD_CHAT_CAPABILITIES: ChatModelCapabilities = {
+  supportsStreaming: true,
+  supportsFunctionCalling: true,
+  supportsVision: false,
+  supportsReasoning: false,
+  supportsSystemPrompt: true,
+  maxContextTokens: 8192,
+  maxOutputTokens: 2048,
+};
+
 const STANDARD_IMAGE_CAPABILITIES: ImageModelCapabilities = {
   supportsGeneration: true,
   supportsEditing: true,
@@ -73,83 +183,217 @@ const STANDARD_IMAGE_CAPABILITIES: ImageModelCapabilities = {
   maxImages: 4,
 };
 
-/**
- * The single registry for image models. OpenRouter fronts all four providers.
- *
- * Order matters: it is the automatic fallback chain
- * (Grok → FLUX → Gemini → Qwen). Capability flags mirror the live
- * `/api/v1/images/models` schema — verified at startup, never guessed:
- *   grok-imagine-image-2.0        resolution 1K|2K, quality low|medium, n≤1, no seed
- *   flux.2-max                    aspect_ratio only (no resolution), seed, n≤1
- *   gemini-3.1-flash-lite-image   resolution 1K only, n≤1, no seed, no quality
- *   qwen-image-3-pro              resolution 1K|2K, seed, n≤6
- */
-export const IMAGE_MODELS: readonly ImageModelDefinition[] = [
-  // -----------------------------
-  // Cloudflare Workers AI
-  // -----------------------------
+export const MODEL_REGISTRY: readonly AIModel[] = Object.freeze([
+  // OpenRouter — free chat models
+  {
+    id: "google/gemma-3-27b-it:free",
+    provider: "openrouter",
+    type: "chat",
+    label: "Gemma 3 27B IT",
+    description: "Google open-weight model via OpenRouter free tier.",
+    enabled: true,
+    supports: ["chat"],
+    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
+    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
+    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
+    metadata: {
+      badges: ["OpenRouter", "Free"],
+      tags: ["chat", "local"],
+      priority: 1,
+      enabled: true,
+      addedAt: "2025-01-01",
+    },
+  },
+  {
+    id: "google/gemma-4-31b-it:free",
+    provider: "openrouter",
+    type: "chat",
+    label: "Gemma 4 31B IT",
+    description: "Google open-weight model via OpenRouter free tier.",
+    enabled: true,
+    supports: ["chat"],
+    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
+    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
+    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
+    metadata: {
+      badges: ["OpenRouter", "Free"],
+      tags: ["chat", "local"],
+      priority: 2,
+      enabled: true,
+      addedAt: "2025-01-01",
+    },
+  },
+  {
+    id: "openai/gpt-oss-20b:free",
+    provider: "openrouter",
+    type: "chat",
+    label: "GPT-OSS 20B",
+    description: "OpenAI open-weight model via OpenRouter free tier.",
+    enabled: true,
+    supports: ["chat"],
+    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
+    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
+    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
+    metadata: {
+      badges: ["OpenRouter", "Free"],
+      tags: ["chat", "local"],
+      priority: 3,
+      enabled: true,
+      addedAt: "2025-01-01",
+    },
+  },
+  {
+    id: "meta-llama/llama-3.3-70b-instruct:free",
+    provider: "openrouter",
+    type: "chat",
+    label: "Llama 3.3 70B Instruct",
+    description: "Meta open-weight model via OpenRouter free tier.",
+    enabled: true,
+    supports: ["chat"],
+    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
+    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
+    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
+    metadata: {
+      badges: ["OpenRouter", "Free"],
+      tags: ["chat", "local"],
+      priority: 4,
+      enabled: true,
+      addedAt: "2025-01-01",
+    },
+  },
+  {
+    id: "poolside/laguna-m-1:free",
+    provider: "openrouter",
+    type: "chat",
+    label: "Laguna M-1",
+    description: "Poolside coding model via OpenRouter free tier.",
+    enabled: true,
+    supports: ["chat"],
+    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
+    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
+    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
+    metadata: {
+      badges: ["OpenRouter", "Free", "Coding"],
+      tags: ["chat", "coding"],
+      priority: 5,
+      enabled: true,
+      addedAt: "2025-01-01",
+    },
+  },
+  {
+    id: "poolside/laguna-xs-2.1:free",
+    provider: "openrouter",
+    type: "chat",
+    label: "Laguna XS 2.1",
+    description: "Poolside lightweight coding model via OpenRouter free tier.",
+    enabled: true,
+    supports: ["chat"],
+    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
+    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
+    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
+    metadata: {
+      badges: ["OpenRouter", "Free"],
+      tags: ["chat", "coding"],
+      priority: 6,
+      enabled: true,
+      addedAt: "2025-01-01",
+    },
+  },
+
+  // Cloudflare Workers AI — free image models
   {
     id: "@cf/black-forest-labs/flux-1-schnell",
     provider: "cloudflare",
-    supports: ["image"],
+    type: "image",
     label: "FLUX Schnell",
     description: "Ultra-fast image generation.",
-    badges: ["Cloudflare", "Fast"],
-    maxWidth: 2048,
-    maxHeight: 2048,
-    estimatedPrice: 0.01,
+    enabled: true,
+    supports: ["image"],
     capabilities: {
       ...STANDARD_IMAGE_CAPABILITIES,
       supportsSeed: true,
       supportsResolution: false,
     },
+    limits: { maxWidth: 2048, maxHeight: 2048, maxImagesPerRequest: 1, maxImages: 4 },
+    pricing: {
+      inputPer1MTokens: 0,
+      outputPer1MTokens: 0,
+      estimatedPricePerImage: 0.01,
+      currency: "USD",
+    },
+    metadata: {
+      badges: ["Cloudflare", "Fast"],
+      tags: ["image"],
+      priority: 1,
+      enabled: true,
+      addedAt: "2025-01-01",
+    },
   },
-
   {
     id: "@cf/google/nano-banana-2-lite",
     provider: "cloudflare",
-    supports: ["image"],
+    type: "image",
     label: "Banana Lite",
     description: "Higher quality Gemini image generation.",
-    badges: ["Cloudflare", "Quality"],
-    maxWidth: 2048,
-    maxHeight: 2048,
-    estimatedPrice: 0.03,
+    enabled: true,
+    supports: ["image"],
     capabilities: {
       ...STANDARD_IMAGE_CAPABILITIES,
       supportsSeed: true,
       supportsResolution: false,
     },
+    limits: { maxWidth: 2048, maxHeight: 2048, maxImagesPerRequest: 1, maxImages: 4 },
+    pricing: {
+      inputPer1MTokens: 0,
+      outputPer1MTokens: 0,
+      estimatedPricePerImage: 0.03,
+      currency: "USD",
+    },
+    metadata: {
+      badges: ["Cloudflare", "Quality"],
+      tags: ["image"],
+      priority: 2,
+      enabled: true,
+      addedAt: "2025-01-01",
+    },
   },
-
   {
     id: "@cf/black-forest-labs/flux-1-kontext-max",
     provider: "cloudflare",
-    supports: ["image"],
+    type: "image",
     label: "FLUX Kontext",
     description: "Context-aware image generation and editing.",
-    badges: ["Cloudflare", "Editing"],
-    maxWidth: 2048,
-    maxHeight: 2048,
-    estimatedPrice: 0.04,
+    enabled: true,
+    supports: ["image"],
     capabilities: {
       ...STANDARD_IMAGE_CAPABILITIES,
       supportsEditing: true,
       supportsSeed: true,
       supportsResolution: false,
     },
+    limits: { maxWidth: 2048, maxHeight: 2048, maxImagesPerRequest: 1, maxImages: 4 },
+    pricing: {
+      inputPer1MTokens: 0,
+      outputPer1MTokens: 0,
+      estimatedPricePerImage: 0.04,
+      currency: "USD",
+    },
+    metadata: {
+      badges: ["Cloudflare", "Editing"],
+      tags: ["image", "editing"],
+      priority: 3,
+      enabled: true,
+      addedAt: "2025-01-01",
+    },
   },
-
   {
     id: "@cf/xai/grok-imagine-image-2.0",
     provider: "cloudflare",
-    supports: ["image"],
+    type: "image",
     label: "Grok Imagine Image",
     description: "Premium Cloudflare image model.",
-    badges: ["Cloudflare", "Premium"],
-    maxWidth: 4096,
-    maxHeight: 4096,
-    estimatedPrice: 0.08,
+    enabled: true,
+    supports: ["image"],
     capabilities: {
       ...STANDARD_IMAGE_CAPABILITIES,
       supportsEditing: true,
@@ -157,335 +401,395 @@ export const IMAGE_MODELS: readonly ImageModelDefinition[] = [
       supportsResolution: false,
       supportsTransparentBackground: true,
     },
-  },
-
-  // -----------------------------
-  // OpenRouter Images
-  // -----------------------------
-  {
-    id: "x-ai/xai/grok-imagine-image-quality",
-    provider: "openrouter",
-    supports: ["image"],
-    label: "Grok Imagine Premium Quality Image",
-    description: "OpenRouter image generation by xAI.",
-    badges: ["OpenRouter"],
-    maxWidth: 2048,
-    maxHeight: 2048,
-    estimatedPrice: 0.03,
-    capabilities: {
-      ...STANDARD_IMAGE_CAPABILITIES,
-      supportsSeed: true,
-      supportsResolution: false,
+    limits: { maxWidth: 4096, maxHeight: 4096, maxImagesPerRequest: 1, maxImages: 4 },
+    pricing: {
+      inputPer1MTokens: 0,
+      outputPer1MTokens: 0,
+      estimatedPricePerImage: 0.08,
+      currency: "USD",
+    },
+    metadata: {
+      badges: ["Cloudflare", "Premium"],
+      tags: ["image"],
+      priority: 4,
+      enabled: true,
+      addedAt: "2025-01-01",
     },
   },
+]);
 
-  {
-    id: "black-forest-labs/flux.2-max",
-    provider: "openrouter",
-    supports: ["image"],
-    label: "FLUX 2 Max",
-    description: "OpenRouter FLUX image generation.",
-    badges: ["OpenRouter", "Fast"],
-    maxWidth: 2048,
-    maxHeight: 2048,
-    estimatedPrice: 0.01,
-    capabilities: {
-      ...STANDARD_IMAGE_CAPABILITIES,
-      supportsSeed: true,
-      supportsResolution: false,
-    },
-  },
+// ===========================================================================
+// SECTION 4 — Validation
+// ===========================================================================
 
-  {
-    id: "google/gemini-3.1-flash-lite-image",
-    provider: "openrouter",
-    supports: ["image"],
-    label: "Gemini Flash Lite Image",
-    description: "OpenRouter Gemini image generation.",
-    badges: ["OpenRouter", "Creative"],
-    maxWidth: 2048,
-    maxHeight: 2048,
-    estimatedPrice: 0.05,
-    capabilities: {
-      ...STANDARD_IMAGE_CAPABILITIES,
-      supportsSeed: true,
-      maxImagesPerRequest: 4,
-    },
-  },
-
-  {
-    id: "qwen/qwen-image-3-pro",
-    provider: "openrouter",
-    supports: ["image"],
-    label: "Qwen Image 3 Pro",
-    description: "OpenRouter Qwen image generation.",
-    badges: ["OpenRouter", "Creative"],
-    maxWidth: 2048,
-    maxHeight: 2048,
-    estimatedPrice: 0.05,
-    capabilities: {
-      ...STANDARD_IMAGE_CAPABILITIES,
-      supportsQuality: true,
-    },
-  },
-] as const;
-
-export const DEFAULT_IMAGE_MODEL_ID = "@cf/black-forest-labs/flux-1-schnell";
-
-export function getImageModel(id?: string): ImageModelDefinition | undefined {
-  return IMAGE_MODELS.find((model) => model.id === (id ?? DEFAULT_IMAGE_MODEL_ID));
+interface RegistryValidationError {
+  type:
+    | "duplicate_id"
+    | "duplicate_label"
+    | "invalid_provider"
+    | "invalid_type"
+    | "missing_api_key_env"
+    | "invalid_capability"
+    | "invalid_pricing"
+    | "invalid_limits"
+    | "missing_fallback"
+    | "invalid_image_capability";
+  modelId: string;
+  detail: string;
 }
-// Current, available model ids per provider. Update model ids here only — they
-// are never hard-coded elsewhere. The `@ai-sdk/openai-compatible`, `@ai-sdk/openai`
-// and `@ai-sdk/google` providers each receive the bare model id (no prefix).
-//
-// Only stable, officially supported models are listed. Experimental and obsolete
-// slugs are removed to avoid wasting probe cycles on dead endpoints.
-// Text providers
-export const PROVIDER_CONFIG: Record<
-  ProviderName,
-  {
-    apiKeyEnv: string;
-    models: readonly string[];
+
+function validateRegistry(): RegistryValidationError[] {
+  const errors: RegistryValidationError[] = [];
+  const seenIds = new Set<string>();
+  const seenLabels = new Set<string>();
+
+  for (const model of MODEL_REGISTRY) {
+    if (seenIds.has(model.id)) {
+      errors.push({
+        type: "duplicate_id",
+        modelId: model.id,
+        detail: `Duplicate model id: ${model.id}`,
+      });
+    }
+    seenIds.add(model.id);
+
+    const labelKey = `${model.provider}:${model.label}`;
+    if (seenLabels.has(labelKey)) {
+      errors.push({
+        type: "duplicate_label",
+        modelId: model.id,
+        detail: `Duplicate label: ${model.label} for provider ${model.provider}`,
+      });
+    }
+    seenLabels.add(labelKey);
+
+    if (!PROVIDER_API_KEY_ENV[model.provider]) {
+      errors.push({
+        type: "missing_api_key_env",
+        modelId: model.id,
+        detail: `Provider "${model.provider}" has no apiKeyEnv mapping`,
+      });
+    }
+
+    if (model.type === "image") {
+      const caps = model.capabilities as ImageModelCapabilities;
+      if (typeof caps.maxImagesPerRequest !== "number" || caps.maxImagesPerRequest < 1) {
+        errors.push({
+          type: "invalid_image_capability",
+          modelId: model.id,
+          detail: "maxImagesPerRequest must be >= 1",
+        });
+      }
+      if (typeof caps.maxImages !== "number" || caps.maxImages < 1) {
+        errors.push({
+          type: "invalid_image_capability",
+          modelId: model.id,
+          detail: "maxImages must be >= 1",
+        });
+      }
+      if (typeof model.limits.maxWidth !== "number" || model.limits.maxWidth < 1) {
+        errors.push({ type: "invalid_limits", modelId: model.id, detail: "maxWidth must be >= 1" });
+      }
+      if (typeof model.limits.maxHeight !== "number" || model.limits.maxHeight < 1) {
+        errors.push({
+          type: "invalid_limits",
+          modelId: model.id,
+          detail: "maxHeight must be >= 1",
+        });
+      }
+    }
+
+    if (typeof model.pricing.inputPer1MTokens !== "number" || model.pricing.inputPer1MTokens < 0) {
+      errors.push({
+        type: "invalid_pricing",
+        modelId: model.id,
+        detail: "inputPer1MTokens must be >= 0",
+      });
+    }
+    if (
+      typeof model.pricing.outputPer1MTokens !== "number" ||
+      model.pricing.outputPer1MTokens < 0
+    ) {
+      errors.push({
+        type: "invalid_pricing",
+        modelId: model.id,
+        detail: "outputPer1MTokens must be >= 0",
+      });
+    }
   }
-> = {
-  gemini: {
-    apiKeyEnv: "GEMINI_API_KEY",
-    models: ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"],
-  },
 
-  openai: {
-    apiKeyEnv: "OPENAI_API_KEY",
-    models: ["gpt-4o-mini", "gpt-4o"],
-  },
+  return errors;
+}
 
-  openrouter: {
-    apiKeyEnv: "OPENROUTER_API_KEY",
-    models: [
-      "google/gemma-3-27b-it:free",
-      "google/gemma-4-31b-it:free",
-      "openai/gpt-oss-20b:free",
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "poolside/laguna-m-1:free",
-      "poolside/laguna-xs-2.1:free",
-    ],
-  },
+const _VALIDATION_ERRORS = validateRegistry();
 
-  // Images only
-  cloudflare: {
-    apiKeyEnv: "CLOUDFLARE_API_TOKEN",
-    models: [],
-  },
-};
+export function getRegistryValidationErrors(): RegistryValidationError[] {
+  return _VALIDATION_ERRORS;
+}
+
+export function assertValidRegistry(): void {
+  const errors = _VALIDATION_ERRORS;
+  if (errors.length > 0) {
+    const messages = errors.map((e) => `[${e.type}] ${e.modelId}: ${e.detail}`).join("\n  ");
+    throw new Error(`MODEL_REGISTRY validation failed:\n  ${messages}`);
+  }
+}
+
+assertValidRegistry();
+
+// ===========================================================================
+// SECTION 5 — Derived Maps
+// ===========================================================================
+
+function buildProviderConfig(): ProviderConfig {
+  const config: ProviderConfig = {
+    openrouter: { apiKeyEnv: PROVIDER_API_KEY_ENV.openrouter, models: [] },
+    cloudflare: { apiKeyEnv: PROVIDER_API_KEY_ENV.cloudflare, models: [] },
+    gemini: { apiKeyEnv: PROVIDER_API_KEY_ENV.gemini, models: [] },
+    openai: { apiKeyEnv: PROVIDER_API_KEY_ENV.openai, models: [] },
+  };
+  for (const model of MODEL_REGISTRY) {
+    if (model.enabled) {
+      config[model.provider].models = [...config[model.provider].models, model.id];
+    }
+  }
+  return config;
+}
+
+function buildChatRegistry(): readonly ChatModelEntry[] {
+  return MODEL_REGISTRY.filter((m): m is ChatModelEntry => m.type === "chat" && m.enabled);
+}
+
+function buildImageRegistry(): readonly ImageModelEntry[] {
+  return MODEL_REGISTRY.filter((m): m is ImageModelEntry => m.type === "image" && m.enabled);
+}
+
+function buildCapabilities() {
+  const chatCapabilities = new Map<string, ChatModelCapabilities>();
+  const imageCapabilities = new Map<string, ImageModelCapabilities>();
+  for (const model of MODEL_REGISTRY) {
+    if (!model.enabled) continue;
+    if (model.type === "chat") {
+      chatCapabilities.set(model.id, model.capabilities);
+    } else {
+      imageCapabilities.set(model.id, model.capabilities);
+    }
+  }
+  return { chatCapabilities, imageCapabilities };
+}
+
+function buildPricing(): ReadonlyMap<string, ModelPricing> {
+  const pricing = new Map<string, ModelPricing>();
+  for (const model of MODEL_REGISTRY) {
+    if (model.enabled) {
+      pricing.set(model.id, model.pricing);
+    }
+  }
+  return pricing;
+}
+
+function buildLookupMaps() {
+  const modelById = new Map<string, AIModel>();
+  const chatModelMap = new Map<string, ChatModelEntry>();
+  const imageModelMap = new Map<string, ImageModelEntry>();
+  const modelIdByProvider: Record<ProviderName, readonly string[]> = {
+    openrouter: [],
+    cloudflare: [],
+    gemini: [],
+    openai: [],
+  };
+
+  for (const model of MODEL_REGISTRY) {
+    modelById.set(model.id, model);
+    modelIdByProvider[model.provider] = [...modelIdByProvider[model.provider], model.id];
+    if (model.type === "chat" && model.enabled) {
+      chatModelMap.set(model.id, model);
+    } else if (model.type === "image" && model.enabled) {
+      imageModelMap.set(model.id, model);
+    }
+  }
+
+  return {
+    modelById,
+    modelIdByProvider,
+    chatModelMap,
+    imageModelMap,
+  };
+}
+
+function buildDashboardModels() {
+  const models: {
+    id: string;
+    label: string;
+    provider: string;
+    available: boolean;
+    type: ModelType;
+  }[] = [];
+  for (const model of MODEL_REGISTRY) {
+    if (model.enabled) {
+      models.push({
+        id: model.id,
+        label: model.label,
+        provider: PROVIDER_LABELS[model.provider],
+        available: true,
+        type: model.type,
+      });
+    }
+  }
+  return models;
+}
+
+function buildHealthConfiguration() {
+  const providerHealthConfig: Record<
+    ProviderName,
+    { label: string; apiKeyEnv: string; models: readonly string[] }
+  > = {
+    openrouter: {
+      label: PROVIDER_LABELS.openrouter,
+      apiKeyEnv: PROVIDER_API_KEY_ENV.openrouter,
+      models: [],
+    },
+    cloudflare: {
+      label: PROVIDER_LABELS.cloudflare,
+      apiKeyEnv: PROVIDER_API_KEY_ENV.cloudflare,
+      models: [],
+    },
+    gemini: { label: PROVIDER_LABELS.gemini, apiKeyEnv: PROVIDER_API_KEY_ENV.gemini, models: [] },
+    openai: { label: PROVIDER_LABELS.openai, apiKeyEnv: PROVIDER_API_KEY_ENV.openai, models: [] },
+  };
+  for (const model of MODEL_REGISTRY) {
+    if (model.enabled) {
+      providerHealthConfig[model.provider].models = [
+        ...providerHealthConfig[model.provider].models,
+        model.id,
+      ];
+    }
+  }
+  return providerHealthConfig;
+}
+
+export const PROVIDER_CONFIG: ProviderConfig = Object.freeze(buildProviderConfig());
+
+export const CHAT_REGISTRY: readonly ChatModelEntry[] = Object.freeze(buildChatRegistry());
+
+export const IMAGE_REGISTRY: readonly ImageModelEntry[] = Object.freeze(buildImageRegistry());
+
+export const PRICING_MAP: ReadonlyMap<string, ModelPricing> = Object.freeze(buildPricing());
+
+export const DASHBOARD_MODELS: ReadonlyArray<{
+  id: string;
+  label: string;
+  provider: string;
+  available: boolean;
+  type: ModelType;
+}> = Object.freeze(buildDashboardModels());
+
+export const HEALTH_CONFIG = Object.freeze(buildHealthConfiguration());
+
+const _CAPABILITIES = buildCapabilities();
+export const CHAT_CAPABILITIES_MAP: ReadonlyMap<string, ChatModelCapabilities> = Object.freeze(
+  _CAPABILITIES.chatCapabilities,
+);
+export const IMAGE_CAPABILITIES_MAP: ReadonlyMap<string, ImageModelCapabilities> = Object.freeze(
+  _CAPABILITIES.imageCapabilities,
+);
+
+const _LOOKUP = buildLookupMaps();
+export const MODEL_MAP: ReadonlyMap<string, AIModel> = Object.freeze(_LOOKUP.modelById);
+export const PROVIDER_MAP: Readonly<Record<ProviderName, readonly string[]>> = Object.freeze(
+  _LOOKUP.modelIdByProvider,
+);
+export const CHAT_MODEL_MAP: ReadonlyMap<string, ChatModelEntry> = Object.freeze(
+  _LOOKUP.chatModelMap,
+);
+export const IMAGE_MODEL_MAP: ReadonlyMap<string, ImageModelEntry> = Object.freeze(
+  _LOOKUP.imageModelMap,
+);
+
+// ===========================================================================
+// SECTION 6 — Routing
+// ===========================================================================
+
 const candidate = (provider: ProviderName, modelId: string): Candidate => ({
   provider,
   modelId,
 });
 
-export type LordMode = "fast" | "balanced" | "coding" | "creative" | "reasoning" | "local";
-
-export const LORD_MODELS: Record<LordMode, readonly Candidate[]> = {
-  // ⚡ Fastest response
+export const LORD_MODELS: Readonly<Record<LordMode, readonly Candidate[]>> = Object.freeze({
   fast: [
-    candidate("gemini", "gemini-2.5-flash-lite"),
-    candidate("openai", "gpt-4o-mini"),
     candidate("openrouter", "google/gemma-3-27b-it:free"),
+    candidate("openrouter", "openai/gpt-oss-20b:free"),
   ],
-
-  // 💬 Best everyday assistant
   balanced: [
-    candidate("gemini", "gemini-2.5-flash"),
-    candidate("openai", "gpt-4o"),
     candidate("openrouter", "google/gemma-4-31b-it:free"),
+    candidate("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
   ],
-
-  // 🧠 Strong reasoning
   reasoning: [
-    candidate("gemini", "gemini-2.5-flash"),
-    candidate("openai", "gpt-4o"),
     candidate("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
     candidate("openrouter", "openai/gpt-oss-20b:free"),
   ],
-
-  // 💻 Coding
   coding: [
-    candidate("openai", "gpt-4o"),
-    candidate("gemini", "gemini-2.5-flash"),
     candidate("openrouter", "openai/gpt-oss-20b:free"),
-    candidate("openrouter", "google/gemma-4-31b-it:free"),
+    candidate("openrouter", "poolside/laguna-m-1:free"),
   ],
-
-  // ✍️ Writing & creativity
   creative: [
-    candidate("openai", "gpt-4o"),
-    candidate("gemini", "gemini-2.5-flash"),
     candidate("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
     candidate("openrouter", "poolside/laguna-m-1:free"),
   ],
-
-  // 🪶 Cheapest / fallback
   local: [
-    candidate("gemini", "gemini-2.5-flash-lite"),
-    candidate("openai", "gpt-4o-mini"),
     candidate("openrouter", "google/gemma-3-27b-it:free"),
+    candidate("openrouter", "poolside/laguna-xs-2.1:free"),
   ],
-};
+});
 
-export const LORD_MODE_LABELS: Record<LordMode, string> = {
+export const LORD_MODE_LABELS: Readonly<Record<LordMode, string>> = Object.freeze({
   fast: "Fast",
   balanced: "Balanced",
   coding: "Coder",
   creative: "Creator",
   reasoning: "Reasoner",
   local: "Local",
-};
-// Build the ordered candidate list (bare model id strings) for a mode. An
-// explicit `modelId` (kept for backwards compatibility) is tried first, then the
-// mode's own list. Duplicates are removed while preserving order. Returns bare
-// model ids so existing callers (e.g. dashboard label lookups) keep working.
-export function buildCandidates(mode: LordMode, explicitModelId?: string): string[] {
-  const base = LORD_MODELS[mode] ?? [];
-  const list = explicitModelId
-    ? [explicitModelId, ...base.map((c) => c.modelId)]
-    : [...base.map((c) => c.modelId)];
-  return Array.from(new Set(list));
+});
+
+// Pre-built candidate maps for O(1) lookup.
+const _ALL_CANDIDATES: readonly Candidate[] = Object.freeze(
+  MODEL_REGISTRY.map((m) => candidate(m.provider, m.id)),
+);
+
+const _CANDIDATE_BY_ID = new Map<string, Candidate>();
+const _CANDIDATE_BY_KEY = new Map<string, Candidate>();
+for (const c of _ALL_CANDIDATES) {
+  _CANDIDATE_BY_ID.set(c.modelId, c);
+  _CANDIDATE_BY_KEY.set(`${c.provider}:${c.modelId}`, c);
 }
 
-// Backwards-compatible wrapper
-export const getLordModelCandidates = buildCandidates;
-
-export type ModelRegistryEntry = {
-  id: string;
-  label: string;
-  provider: string;
-  description?: string;
-  supports: readonly ModelCapability[];
-  maxResolution?: { width: number; height: number };
-  estimatedPrice?: number;
-  badges?: readonly string[];
-};
-
-const PROVIDER_LABELS: Record<ProviderName, string> = {
-  gemini: "Google",
-  openrouter: "OpenRouter",
-  openai: "OpenAI",
-  cloudflare: "Cloudflare",
-};
-
-const MODEL_DESCRIPTIONS: Record<string, string> = {
-  "gemini-3.5-flash": "Google's latest fast, efficient model (stable)",
-  "gemini-pro-latest": "Google's most capable reasoning model (stable alias)",
-  "google/gemma-4-26b-a4b-it:free": "Google's open-weight model via OpenRouter free tier",
-  "openai/gpt-oss-20b:free": "OpenAI open-weight model via OpenRouter free tier",
-  "gpt-4o-mini": "OpenAI's fast, cost-effective model",
-  "gpt-4o": "OpenAI's most capable general-purpose model",
-};
-
-export function buildModelRegistry(): ModelRegistryEntry[] {
-  const entries: ModelRegistryEntry[] = [];
-  for (const [provider, config] of Object.entries(PROVIDER_CONFIG)) {
-    const label = PROVIDER_LABELS[provider as ProviderName] ?? provider;
-    for (const modelId of config.models) {
-      const displayId = modelId.includes("/") ? modelId : `${provider}/${modelId}`;
-      entries.push({
-        id: displayId,
-        label: formatModelLabel(modelId),
-        provider: label,
-        description: MODEL_DESCRIPTIONS[modelId] ?? `${label} model: ${modelId}`,
-        supports: ["chat"],
-      });
-    }
-  }
-  for (const model of IMAGE_MODELS) {
-    entries.push({
-      id: model.id,
-      label: model.label,
-      provider: PROVIDER_LABELS[model.provider],
-      description: model.description,
-      supports: model.supports,
-      maxResolution: { width: model.maxWidth, height: model.maxHeight },
-      estimatedPrice: model.estimatedPrice,
-      badges: model.badges,
-    });
-  }
-  return entries;
+export function buildAllCandidates(): readonly Candidate[] {
+  return _ALL_CANDIDATES;
 }
 
-function formatModelLabel(modelId: string): string {
-  const base = modelId.includes("/") ? (modelId.split("/").pop() ?? modelId) : modelId;
-  return base
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-    .replace(/\s+/g, " ");
-}
-
-export const MODEL_REGISTRY = buildModelRegistry();
-export const DEFAULT_MODEL_ID: string = MODEL_REGISTRY[0]?.id ?? "";
-
-const ModelIdSchema = z.string().min(1);
-
-export function validateModelId(
-  modelId: unknown,
-): { valid: true; modelId: string } | { valid: false; modelId: string; reason: string } {
-  const fallback = DEFAULT_MODEL_ID;
-
-  const parsed = ModelIdSchema.safeParse(modelId);
-  if (!parsed.success) {
-    return { valid: false, modelId: fallback, reason: "missing_or_not_string" };
-  }
-
-  const knownIds = new Set(MODEL_REGISTRY.map((m) => m.id));
-  if (knownIds.has(parsed.data)) {
-    return { valid: true, modelId: parsed.data };
-  }
-
-  return { valid: false, modelId: fallback, reason: "unknown_model_id" };
-}
-
-// Flatten every candidate across all modes into provider+modelId pairs. Used
-// for bare-id resolution and diagnostics.
-export function buildAllCandidates(): Candidate[] {
-  const seen = new Set<string>();
-  const out: Candidate[] = [];
-  for (const provider of ["gemini", "openai", "openrouter"] as const) {
-    for (const modelId of PROVIDER_CONFIG[provider].models) {
-      const key = `${provider}:${modelId}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ provider, modelId });
-    }
-  }
-  return out;
-}
-
-// Resolve a model id only through the typed registry. Provider ownership is
-// never inferred from an id's punctuation or vendor prefix.
 export function resolveProvider(
   modelId: string,
   explicitProvider?: ProviderName,
 ): ProviderName | null {
   if (explicitProvider) return explicitProvider;
-  for (const c of buildAllCandidates()) {
-    if (c.modelId === modelId) return c.provider;
-  }
-  return null;
+  const entry = MODEL_MAP.get(modelId);
+  if (entry) return entry.provider;
+  return _CANDIDATE_BY_ID.get(modelId)?.provider ?? null;
 }
 
-// Resolve a model id to a full Candidate through the known registry.
 export function resolveCandidate(
   modelId: string,
   explicitProvider?: ProviderName,
 ): Candidate | null {
-  const known = buildAllCandidates().find(
-    (c) => c.modelId === modelId && (!explicitProvider || c.provider === explicitProvider),
-  );
-  if (known) return known;
-  return null;
+  if (explicitProvider) {
+    const key = `${explicitProvider}:${modelId}`;
+    const c = _CANDIDATE_BY_KEY.get(key);
+    if (c) return c;
+    return { provider: explicitProvider, modelId };
+  }
+  return _CANDIDATE_BY_ID.get(modelId) ?? null;
 }
 
-// Return the ordered candidate list for a mode, optionally preferring a known
-// working provider/model (passed in from the probe cache) so we skip
-// re-probing on every request. Duplicates are removed while preserving order.
 export function getModeCandidates(
   mode: LordMode,
   explicitModelId?: string,
@@ -493,7 +797,9 @@ export function getModeCandidates(
   preferredModelId?: string,
 ): Candidate[] {
   const base = LORD_MODELS[mode] ?? [];
-  const ordered =
+  const resolvedExplicit = explicitModelId ? resolveCandidate(explicitModelId) : null;
+
+  const ordered: Candidate[] =
     preferredProvider && preferredModelId
       ? [
           { provider: preferredProvider, modelId: preferredModelId },
@@ -502,8 +808,12 @@ export function getModeCandidates(
           ),
         ]
       : [...base];
-  const explicit = explicitModelId ? resolveCandidate(explicitModelId, preferredProvider) : null;
+
+  const explicit = explicitModelId
+    ? resolveCandidate(explicitModelId, preferredProvider)
+    : resolvedExplicit;
   const list = explicit ? [explicit, ...ordered] : ordered;
+
   const seen = new Set<string>();
   const out: Candidate[] = [];
   for (const c of list) {
@@ -515,11 +825,102 @@ export function getModeCandidates(
   return out;
 }
 
-// Typed, structured client error produced by the fetch wrapper so
-// classification never has to guess from a free-form message. It is attached to
-// the thrown Error via a symbol marker so it survives SDK error wrapping
-// (the AI SDK re-throws our error as `cause`), and its message also carries a
-// regex-matchable signature as a fallback.
+export const getLordModelCandidates = getModeCandidates;
+
+export function buildCandidates(mode: LordMode, explicitModelId?: string): string[] {
+  const base = LORD_MODELS[mode] ?? [];
+  const list = explicitModelId
+    ? [explicitModelId, ...base.map((c) => c.modelId)]
+    : [...base.map((c) => c.modelId)];
+  return Array.from(new Set(list));
+}
+
+// ===========================================================================
+// SECTION 7 — Utilities
+// ===========================================================================
+
+function formatModelLabel(modelId: string): string {
+  const base = modelId.includes("/") ? (modelId.split("/").pop() ?? modelId) : modelId;
+  return base
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .replace(/\s+/g, " ");
+}
+
+export function buildModelRegistry(): ModelRegistryEntry[] {
+  const entries: ModelRegistryEntry[] = [];
+  for (const model of MODEL_REGISTRY) {
+    if (!model.enabled) continue;
+    const displayId = model.id.includes("/") ? model.id : `${model.provider}/${model.id}`;
+    entries.push({
+      id: displayId,
+      label: model.type === "image" ? model.label : formatModelLabel(model.id),
+      provider: PROVIDER_LABELS[model.provider],
+      description: model.description,
+      supports: model.supports,
+      ...(model.type === "image"
+        ? {
+            maxResolution: { width: model.limits.maxWidth, height: model.limits.maxHeight },
+            estimatedPrice: model.pricing.estimatedPricePerImage,
+            badges: model.metadata.badges,
+          }
+        : {}),
+    });
+  }
+  return entries;
+}
+
+export const MODEL_REGISTRY_ENTRIES: readonly ModelRegistryEntry[] =
+  Object.freeze(buildModelRegistry());
+
+const ModelIdSchema = z.string().min(1);
+
+export function validateModelId(
+  modelId: unknown,
+): { valid: true; modelId: string } | { valid: false; modelId: string; reason: string } {
+  const fallback = MODEL_REGISTRY_ENTRIES[0]?.id ?? "";
+
+  const parsed = ModelIdSchema.safeParse(modelId);
+  if (!parsed.success) {
+    return { valid: false, modelId: fallback, reason: "missing_or_not_string" };
+  }
+
+  const knownIds = new Set(MODEL_REGISTRY_ENTRIES.map((m) => m.id));
+  if (knownIds.has(parsed.data)) {
+    return { valid: true, modelId: parsed.data };
+  }
+
+  return { valid: false, modelId: fallback, reason: "unknown_model_id" };
+}
+
+export const DEFAULT_MODEL_ID: string = MODEL_REGISTRY_ENTRIES[0]?.id ?? "";
+
+// Backward-compatible image model adapter derived from MODEL_REGISTRY.
+export const IMAGE_MODELS: readonly ImageModelDefinition[] = Object.freeze(
+  IMAGE_REGISTRY.map((m) => ({
+    id: m.id,
+    provider: m.provider,
+    supports: m.supports as readonly ["image"],
+    label: m.label,
+    description: m.description,
+    badges: m.metadata.badges,
+    maxWidth: m.limits.maxWidth,
+    maxHeight: m.limits.maxHeight,
+    estimatedPrice: m.pricing.estimatedPricePerImage ?? 0,
+    capabilities: m.capabilities,
+  })),
+);
+
+export const DEFAULT_IMAGE_MODEL_ID: string = IMAGE_MODELS[0]?.id ?? "";
+
+export function getImageModel(id?: string): ImageModelDefinition | undefined {
+  return IMAGE_MODELS.find((model) => model.id === (id ?? DEFAULT_IMAGE_MODEL_ID));
+}
+
+// ===========================================================================
+// SECTION 8 — Error Classification
+// ===========================================================================
+
 export type OpenRouterClientErrorKind = "network" | "abort" | "timeout" | "parse" | "api";
 
 export const OPENROUTER_CLIENT_ERROR = Symbol.for("lord.openrouter.client-error");
@@ -545,49 +946,6 @@ export class OpenRouterClientError extends Error {
   }
 }
 
-// Extract a human-readable message from a raw provider error body (JSON or text).
-function extractMessageFromBody(body?: string): string | undefined {
-  if (!body) return undefined;
-  try {
-    const parsed = JSON.parse(body);
-    if (parsed && typeof parsed === "object") {
-      return (
-        parsed?.error?.message ??
-        parsed?.message ??
-        (typeof parsed?.error === "string" ? parsed.error : undefined)
-      );
-    }
-  } catch {
-    return body.slice(0, 500);
-  }
-  return undefined;
-}
-
-// Walk the error and its `cause` chain looking for our structured marker.
-// Returns null when the error did not originate from our fetch wrapper.
-function findClientErrorMark(error: unknown): {
-  kind: OpenRouterClientErrorKind;
-  status?: number;
-  body?: string;
-} | null {
-  const seen = new Set<unknown>();
-  let cur: unknown = error;
-  while (cur && typeof cur === "object" && !seen.has(cur)) {
-    seen.add(cur);
-    const marker = (cur as Record<symbol, unknown>)[OPENROUTER_CLIENT_ERROR];
-    if (marker && typeof marker === "object") {
-      return marker as {
-        kind: OpenRouterClientErrorKind;
-        status?: number;
-        body?: string;
-      };
-    }
-    cur = (cur as { cause?: unknown }).cause;
-  }
-  return null;
-}
-
-// Type-safe error reasons for better IDE support and refactoring safety
 export type ModelErrorReason =
   | "invalid_api_key"
   | "malformed_request"
@@ -619,15 +977,11 @@ export interface ModelAttempt {
   timestamp: number;
 }
 
-// Pre-compiled regex patterns for performance (avoids recompilation on every call)
 const ERROR_PATTERNS = {
-  // Non-retryable: auth / client mistakes
   invalidApiKey:
     /invalid api key|api key not valid|api_key_invalid|incorrect api key|missing api key|expired api key|unauthorized|authentication failed|not authorized|401/i,
   malformedRequest: /malformed request|invalid request|bad request|400/i,
   invalidMessages: /invalid message|message is invalid|content policy|moderation/i,
-
-  // Retryable: capacity / provider / network
   insufficientCredits: /insufficient.{0,12}credit|payment required|402/i,
   rateLimit: /rate limit|too many requests|429/i,
   modelUnavailable: /model not found|model unavailable|does not exist|not supported|404/i,
@@ -635,13 +989,28 @@ const ERROR_PATTERNS = {
     /provider unavailable|provider error|upstream|bad gateway|502|503|504|service unavailable|gateway timeout|timeout|timed out|etimedout|econnrefused|econnreset|network|fetch failed|enotfound|aborted|streaming failed|stream error/i,
 } as const;
 
-// Extract HTTP status from error message if present
 function extractStatus(message: string): number | undefined {
   const match = message.match(/\b(4\d{2}|5\d{2})\b/);
   return match ? parseInt(match[1], 10) : undefined;
 }
 
-// Extract provider error details from provider error response
+function extractMessageFromBody(body?: string): string | undefined {
+  if (!body) return undefined;
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && typeof parsed === "object") {
+      return (
+        parsed?.error?.message ??
+        parsed?.message ??
+        (typeof parsed?.error === "string" ? parsed.error : undefined)
+      );
+    }
+  } catch {
+    return body.slice(0, 500);
+  }
+  return undefined;
+}
+
 function extractProviderDetails(error: unknown): {
   providerMessage?: string;
   errorCode?: string;
@@ -664,26 +1033,36 @@ function extractProviderDetails(error: unknown): {
   return {};
 }
 
-// Provider bodies that mean "this key was rejected", regardless of the HTTP
-// status used to deliver it. Gemini reports an invalid key as
-// 400 { error: { message: "API key not valid. Please pass a valid API key.",
-// status: "INVALID_ARGUMENT", details: [{ reason: "API_KEY_INVALID" }] } },
-// which must be handled as an auth failure and not as a malformed request —
-// otherwise the gateway keeps probing the same provider with the same bad key.
+function findClientErrorMark(error: unknown): {
+  kind: OpenRouterClientErrorKind;
+  status?: number;
+  body?: string;
+} | null {
+  const seen = new Set<unknown>();
+  let cur: unknown = error;
+  while (cur && typeof cur === "object" && !seen.has(cur)) {
+    seen.add(cur);
+    const marker = (cur as Record<symbol, unknown>)[OPENROUTER_CLIENT_ERROR];
+    if (marker && typeof marker === "object") {
+      return marker as {
+        kind: OpenRouterClientErrorKind;
+        status?: number;
+        body?: string;
+      };
+    }
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
 const AUTH_FAILURE_MESSAGE =
   /api[\s_-]?key not valid|api[\s_-]?key[\s_-]?invalid|invalid[\s_-]api[\s_-]?key|incorrect api key|expired api key|missing api key|invalid authentication|unauthenticated|no auth credentials|api key expired|permission denied|caller does not have permission/i;
 
-/** True when a provider body indicates the API key itself was rejected. */
 export function isAuthFailureMessage(text?: string): boolean {
   if (!text) return false;
   return AUTH_FAILURE_MESSAGE.test(text);
 }
 
-/**
- * True when a classified error means the provider rejected our credentials.
- * The gateway uses this to disable that provider for the rest of the request
- * and continue with the next configured provider.
- */
 export function isAuthFailure(classification: ModelErrorClassification): boolean {
   if (classification.reason === "invalid_api_key") return true;
   if (classification.status === 401 || classification.status === 403) return true;
@@ -693,13 +1072,7 @@ export function isAuthFailure(classification: ModelErrorClassification): boolean
   return false;
 }
 
-// Maps a raw provider/model error to a retry decision. Retryable errors cause
-// the backend to fall through to the next candidate; non-retryable errors stop
-// immediately (the failure is the caller's responsibility, e.g. a bad key).
 export function classifyModelError(error: unknown): ModelErrorClassification {
-  // 1) Structured client errors from our fetch wrapper carry the real reason,
-  //    status, and (for HTTP errors) the full provider body. Prefer these so we
-  //    never collapse to a generic "unknown" when we already know what failed.
   const clientErr = findClientErrorMark(error);
   if (clientErr) {
     if (clientErr.kind === "api" && typeof clientErr.status === "number") {
@@ -707,7 +1080,6 @@ export function classifyModelError(error: unknown): ModelErrorClassification {
       const providerMessage = extractMessageFromBody(clientErr.body);
       if (status === 401 || status === 403)
         return { retryable: false, reason: "invalid_api_key", status, providerMessage };
-      // An auth rejection delivered as 400 (Gemini) is still an auth rejection.
       if (isAuthFailureMessage(providerMessage) || isAuthFailureMessage(clientErr.body))
         return { retryable: false, reason: "invalid_api_key", status, providerMessage };
       if (status === 400 || status === 422)
@@ -721,15 +1093,9 @@ export function classifyModelError(error: unknown): ModelErrorClassification {
         return { retryable: true, reason: "provider_error", status, providerMessage };
       return { retryable: true, reason: "provider_error", status, providerMessage };
     }
-    // network / abort / timeout / parse — always retryable, with real detail.
     const message = error instanceof Error ? error.message : String(error);
     const providerMessage = `Provider client ${clientErr.kind}: ${message}`;
-    return {
-      retryable: true,
-      reason: "provider_error",
-      status: 0,
-      providerMessage,
-    };
+    return { retryable: true, reason: "provider_error", status: 0, providerMessage };
   }
 
   const raw =
@@ -739,11 +1105,9 @@ export function classifyModelError(error: unknown): ModelErrorClassification {
         ? error
         : JSON.stringify(error ?? "unknown error");
   const msg = raw.toLowerCase();
-
   const providerDetails = extractProviderDetails(error);
   const status = extractStatus(raw);
 
-  // Check non-retryable patterns first (order matters for specificity)
   if (ERROR_PATTERNS.invalidApiKey.test(msg)) {
     return {
       retryable: false,
@@ -768,8 +1132,6 @@ export function classifyModelError(error: unknown): ModelErrorClassification {
       ...providerDetails,
     };
   }
-
-  // Check retryable patterns
   if (ERROR_PATTERNS.insufficientCredits.test(msg)) {
     return {
       retryable: true,
@@ -790,11 +1152,14 @@ export function classifyModelError(error: unknown): ModelErrorClassification {
     };
   }
   if (ERROR_PATTERNS.providerError.test(msg)) {
-    return { retryable: true, reason: "provider_error", status: status ?? 502, ...providerDetails };
+    return {
+      retryable: true,
+      reason: "provider_error",
+      status: status ?? 502,
+      ...providerDetails,
+    };
   }
 
-  // Unknown errors are treated as retryable so fallback gets a chance, but we
-  // still surface the real message instead of a blank "Unknown error".
   return {
     retryable: true,
     reason: "unknown",
@@ -804,6 +1169,10 @@ export function classifyModelError(error: unknown): ModelErrorClassification {
     ...providerDetails,
   };
 }
+
+// ===========================================================================
+// SECTION 9 — System Prompt
+// ===========================================================================
 
 export const LORD_SYSTEM_PROMPT = `
 You are LORD — the intelligent operating layer and personal AI assistant of this application.

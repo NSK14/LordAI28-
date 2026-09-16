@@ -17,16 +17,40 @@
 
 import type { WakeEngine } from "./wake-engine";
 
-// onnxruntime-web is loaded lazily so it never lands in the SSR bundle.
+// onnxruntime-web is loaded lazily from CDN so it never lands in the SSR or
+// initial client bundle. The runtime import points to jsDelivr; the type below
+// is intentionally loose because the CDN bundle is not type-checked locally.
+type OrtModule = {
+  Tensor: new (
+    type: string,
+    data: ArrayLike<number>,
+    dims: readonly number[],
+  ) => {
+    data: ArrayLike<number>;
+    dims: readonly number[];
+  };
+  InferenceSession: {
+    create: (
+      model: ArrayBuffer,
+      opts?: { executionProviders?: readonly string[] },
+    ) => Promise<{
+      inputNames: readonly string[];
+      outputNames: readonly string[];
+      run: (
+        feeds: Record<string, { data: ArrayLike<number>; dims: readonly number[] }>,
+      ) => Promise<Record<string, { data: ArrayLike<number>; dims: readonly number[] }>>;
+    }>;
+  };
+  env: { wasm: { wasmPaths?: string } };
+};
+
 type OrtSession = {
   inputNames: readonly string[];
   outputNames: readonly string[];
   run: (
-    feeds: Record<string, unknown>,
+    feeds: Record<string, { data: ArrayLike<number>; dims: readonly number[] }>,
   ) => Promise<Record<string, { data: ArrayLike<number>; dims: readonly number[] }>>;
 };
-
-type OrtModule = typeof import("onnxruntime-web");
 
 const CDN_BASE =
   "https://cdn.jsdelivr.net/gh/dscripka/openWakeWord@main/openwakeword/resources/models/";
@@ -48,13 +72,9 @@ const EMBED_DIM = 96;
 const EMBED_WINDOW = 16; // classifier expects 16 embeddings (~1.28 s)
 
 async function loadOrt(): Promise<OrtModule> {
-  const ort = await import("onnxruntime-web");
-  // Use the official CDN for the WASM artifacts so the bundler doesn't have
-  // to ship them; this also avoids subpath issues inside the Capacitor
-  // file:// WebView.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (ort as any).env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/";
-  return ort;
+  const ort =
+    await import("https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/ort.bundle.min.js");
+  return ort as OrtModule;
 }
 
 async function fetchModel(url: string): Promise<ArrayBuffer | null> {
