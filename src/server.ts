@@ -3,7 +3,6 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { getServerEnvironmentDiagnostics, reloadServerEnv } from "./lib/env.server";
-import { logProviderConfigurationDiagnostics } from "./lib/ai-gateway.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -68,9 +67,6 @@ console.info(
     port: process.env.PORT ?? process.env.VITE_PORT ?? process.env.SERVER_PORT ?? 8080,
   }),
 );
-
-// Startup diagnostics: Gemini / OpenAI / OpenRouter configured or not.
-logProviderConfigurationDiagnostics();
 
 // Image pipeline startup check: verify Cloudflare credentials and per-model
 // availability, and print a health report. Runs async so it never blocks boot;

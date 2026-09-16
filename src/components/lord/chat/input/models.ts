@@ -4,7 +4,7 @@ export interface ModelDef {
   provider: string;
 }
 
-import { MODEL_REGISTRY, DEFAULT_MODEL_ID } from "@/lib/model-registry";
+import { MODEL_REGISTRY, DEFAULT_MODEL_ID } from "@/lib/ai/models";
 
 export const MODELS: ModelDef[] = MODEL_REGISTRY.filter((m) => m.supports.includes("chat")).map(
   (m) => ({

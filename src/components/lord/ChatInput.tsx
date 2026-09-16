@@ -3,7 +3,7 @@ import { Loader2, Paperclip, Image, FileText, Globe, Mic, ArrowRight } from "luc
 
 import { cn } from "@/lib/utils";
 
-import { MODEL_REGISTRY } from "@/lib/model-registry";
+import { MODEL_REGISTRY } from "@/lib/ai/models";
 
 export default function ChatInput({
   value,

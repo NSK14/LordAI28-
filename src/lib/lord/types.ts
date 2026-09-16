@@ -62,7 +62,7 @@ export interface ToolContext {
   llm: (opts: {
     system: string;
     prompt: string;
-    mode?: import("@/lib/lord-config").LordMode;
+    mode?: import("@/lib/ai/models").LordMode;
   }) => Promise<{ text: string; provider?: string }>;
   /** Resolved server-side configuration. */
   config: import("./config").LordConfig;

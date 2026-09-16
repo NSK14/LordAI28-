@@ -1,8 +1,8 @@
 import type { ComponentType } from "react";
 import { Zap, Scale, Code2, Palette, Brain, Smartphone } from "lucide-react";
-import type { LordMode } from "./lord-config";
+import type { LordMode } from "./ai/models";
 
-export type { LordMode } from "./lord-config";
+export type { LordMode } from "./ai/models";
 
 // Client-side capability modes. The frontend only knows about these — the
 // underlying model ids live on the server (see LORD_MODELS in lord-config.ts).

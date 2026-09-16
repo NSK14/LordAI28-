@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { LORD_MODELS, type LordMode } from "@/lib/ai-gateway.server";
+import { LORD_MODES, type LordMode } from "@/lib/ai/models";
 
-export const MODE_ENUM = Object.keys(LORD_MODELS) as [LordMode, ...LordMode[]];
+export const MODE_ENUM = LORD_MODES as [LordMode, ...LordMode[]];
 
 export const ChatRequestSchema = z.object({
   messages: z
