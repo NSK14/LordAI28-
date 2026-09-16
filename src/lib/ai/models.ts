@@ -11,14 +11,17 @@ export const LORD_MODES: readonly LordMode[] = [
   "local",
 ];
 
+export const MODELS = {
+  DEFAULT: "nvidia/nemotron-3-ultra-550b-a55b:free",
+} as const;
+
 export const MODEL_REGISTRY: readonly ModelInfo[] = [
   {
-    id: "placeholder",
-    label: "Placeholder",
-    provider: "none",
+    id: MODELS.DEFAULT,
+    label: "GPT-4.1 Mini",
+    provider: "openrouter",
     supportsStreaming: true,
     supports: ["chat"],
-    description: "Temporary model used while providers are being rebuilt.",
   },
 ];
 
@@ -34,5 +37,5 @@ export const LORD_MODELS: Readonly<Record<LordMode, readonly string[]>> = Object
 });
 
 export function getModel(modelId?: string): AIModel {
-  return MODEL_REGISTRY.find((model) => model.id === modelId) ?? MODEL_REGISTRY[0];
+  return MODEL_REGISTRY[0];
 }

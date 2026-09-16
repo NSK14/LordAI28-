@@ -1,8 +1,3 @@
-export interface AIProvider {
-  id: string;
-  name: string;
-}
-
 export interface AIModel {
   id: string;
   label: string;
@@ -11,22 +6,22 @@ export interface AIModel {
   supports: readonly ["chat"];
 }
 
-export interface ChatRequest {
-  messages: unknown[];
-  modelId?: string;
-  mode?: string;
-  system?: string;
+export type ChatRole = "system" | "user" | "assistant";
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string;
+}
+
+export interface OpenRouterRequest {
+  model: string;
+  messages: readonly ChatMessage[];
+  stream: true;
+  max_tokens: 512;
 }
 
 export interface ChatResponse {
   text: string;
-  modelId?: string;
-}
-
-export interface ProviderConfig {
-  id: string;
-  name: string;
-  apiKey?: string;
 }
 
 export interface ModelInfo extends AIModel {

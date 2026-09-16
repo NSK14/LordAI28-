@@ -10,8 +10,6 @@ import {
   Settings,
   ChevronRight,
   BarChart3,
-  Images,
-  Command,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
@@ -19,8 +17,6 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/chat", label: "Chat", icon: MessageSquare },
-  { to: "/images", label: "Images", icon: Images },
-  { to: "/command-center", label: "Command Center", icon: Command },
   { to: "/study", label: "Study", icon: GraduationCap },
   { to: "/tasks", label: "Tasks", icon: Target },
   { to: "/documents", label: "Documents", icon: FileText },

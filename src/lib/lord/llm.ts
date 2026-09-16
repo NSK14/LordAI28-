@@ -1,4 +1,3 @@
-import { sendChat } from "@/lib/ai/gateway";
 import type { LordMode } from "@/lib/ai/models";
 
 export interface LlmCallOptions {
@@ -11,12 +10,8 @@ export interface LlmCallOptions {
 export async function runLordText(
   opts: LlmCallOptions,
 ): Promise<{ text: string; provider?: string }> {
-  const response = await sendChat({
-    messages: [{ role: "user", content: opts.prompt }],
-    mode: opts.mode,
-    system: opts.system,
-  });
-  return { text: response.text, provider: "none" };
+  void opts;
+  throw new Error("OpenRouter text generation is only available through the chat gateway.");
 }
 
 export async function runLordVision(opts: {
