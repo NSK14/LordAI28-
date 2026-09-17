@@ -194,10 +194,6 @@ export function NavigationDock() {
         ...NAV.slice(2),
       ]
     : NAV;
-  const { displayLearn } = usePrivateChatAccess();
-  const visibleNav = displayLearn
-    ? [...NAV.slice(0, 2), { to: "/learn", label: "Learn", icon: BookOpen }, ...NAV.slice(2)]
-    : NAV;
 
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
