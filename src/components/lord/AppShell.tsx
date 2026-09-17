@@ -16,6 +16,7 @@ import {
   Calendar,
   BarChart3,
   FolderOpen,
+  BookOpen,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -27,6 +28,7 @@ import { WakeIndicator } from "./WakeIndicator";
 import { HealthHud } from "./HealthHud";
 import { NavigationDock } from "./NavigationDock";
 import { DailyBriefing } from "./DailyBriefing";
+import { usePrivateChatAccess } from "@/hooks/use-private-chat-access";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -50,6 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const path = location.pathname;
+  const { displayLearn } = usePrivateChatAccess();
 
   const [user, setUser] = useState<User | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -206,7 +209,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <HealthHud compact />
             <ul className="grid gap-2">
-              {SECONDARY_NAV.map(({ to, label, icon: Icon }) => {
+              {(displayLearn
+                ? [...SECONDARY_NAV, { to: "/learn", label: "Learn", icon: BookOpen }]
+                : SECONDARY_NAV
+              ).map(({ to, label, icon: Icon }) => {
                 const active = to === "/" ? path === "/" : path.startsWith(to);
                 return (
                   <li key={to}>

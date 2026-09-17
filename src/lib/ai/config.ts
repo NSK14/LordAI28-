@@ -2,6 +2,11 @@ export interface AIConfig {
   openRouterApiKey: string;
 }
 
+export const AI = {
+  OPENROUTER_MODEL: "openrouter/auto",
+  ONLY_FREE: true,
+} as const;
+
 export class AIConfigurationError extends Error {
   constructor(message: string) {
     super(message);

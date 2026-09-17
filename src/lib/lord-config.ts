@@ -157,16 +157,6 @@ const PROVIDER_LABELS: Record<ProviderName, string> = {
 // SECTION 3 — Model Registry (single source of truth)
 // ===========================================================================
 
-const STANDARD_CHAT_CAPABILITIES: ChatModelCapabilities = {
-  supportsStreaming: true,
-  supportsFunctionCalling: true,
-  supportsVision: false,
-  supportsReasoning: false,
-  supportsSystemPrompt: true,
-  maxContextTokens: 8192,
-  maxOutputTokens: 2048,
-};
-
 const STANDARD_IMAGE_CAPABILITIES: ImageModelCapabilities = {
   supportsGeneration: true,
   supportsEditing: true,
@@ -184,123 +174,7 @@ const STANDARD_IMAGE_CAPABILITIES: ImageModelCapabilities = {
 };
 
 export const MODEL_REGISTRY: readonly AIModel[] = Object.freeze([
-  // OpenRouter — free chat models
-  {
-    id: "google/gemma-3-27b-it:free",
-    provider: "openrouter",
-    type: "chat",
-    label: "Gemma 3 27B IT",
-    description: "Google open-weight model via OpenRouter free tier.",
-    enabled: true,
-    supports: ["chat"],
-    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
-    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
-    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
-    metadata: {
-      badges: ["OpenRouter", "Free"],
-      tags: ["chat", "local"],
-      priority: 1,
-      enabled: true,
-      addedAt: "2025-01-01",
-    },
-  },
-  {
-    id: "google/gemma-4-31b-it:free",
-    provider: "openrouter",
-    type: "chat",
-    label: "Gemma 4 31B IT",
-    description: "Google open-weight model via OpenRouter free tier.",
-    enabled: true,
-    supports: ["chat"],
-    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
-    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
-    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
-    metadata: {
-      badges: ["OpenRouter", "Free"],
-      tags: ["chat", "local"],
-      priority: 2,
-      enabled: true,
-      addedAt: "2025-01-01",
-    },
-  },
-  {
-    id: "openai/gpt-oss-20b:free",
-    provider: "openrouter",
-    type: "chat",
-    label: "GPT-OSS 20B",
-    description: "OpenAI open-weight model via OpenRouter free tier.",
-    enabled: true,
-    supports: ["chat"],
-    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
-    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
-    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
-    metadata: {
-      badges: ["OpenRouter", "Free"],
-      tags: ["chat", "local"],
-      priority: 3,
-      enabled: true,
-      addedAt: "2025-01-01",
-    },
-  },
-  {
-    id: "meta-llama/llama-3.3-70b-instruct:free",
-    provider: "openrouter",
-    type: "chat",
-    label: "Llama 3.3 70B Instruct",
-    description: "Meta open-weight model via OpenRouter free tier.",
-    enabled: true,
-    supports: ["chat"],
-    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
-    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
-    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
-    metadata: {
-      badges: ["OpenRouter", "Free"],
-      tags: ["chat", "local"],
-      priority: 4,
-      enabled: true,
-      addedAt: "2025-01-01",
-    },
-  },
-  {
-    id: "poolside/laguna-m-1:free",
-    provider: "openrouter",
-    type: "chat",
-    label: "Laguna M-1",
-    description: "Poolside coding model via OpenRouter free tier.",
-    enabled: true,
-    supports: ["chat"],
-    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
-    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
-    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
-    metadata: {
-      badges: ["OpenRouter", "Free", "Coding"],
-      tags: ["chat", "coding"],
-      priority: 5,
-      enabled: true,
-      addedAt: "2025-01-01",
-    },
-  },
-  {
-    id: "poolside/laguna-xs-2.1:free",
-    provider: "openrouter",
-    type: "chat",
-    label: "Laguna XS 2.1",
-    description: "Poolside lightweight coding model via OpenRouter free tier.",
-    enabled: true,
-    supports: ["chat"],
-    capabilities: { ...STANDARD_CHAT_CAPABILITIES },
-    limits: { maxContextTokens: 8192, maxOutputTokens: 2048, maxImagesPerRequest: 0, maxImages: 0 },
-    pricing: { inputPer1MTokens: 0, outputPer1MTokens: 0, currency: "USD" },
-    metadata: {
-      badges: ["OpenRouter", "Free"],
-      tags: ["chat", "coding"],
-      priority: 6,
-      enabled: true,
-      addedAt: "2025-01-01",
-    },
-  },
-
-  // Cloudflare Workers AI — free image models
+  // Cloudflare Workers AI image models
   {
     id: "@cf/black-forest-labs/flux-1-schnell",
     provider: "cloudflare",
@@ -716,30 +590,12 @@ const candidate = (provider: ProviderName, modelId: string): Candidate => ({
 });
 
 export const LORD_MODELS: Readonly<Record<LordMode, readonly Candidate[]>> = Object.freeze({
-  fast: [
-    candidate("openrouter", "google/gemma-3-27b-it:free"),
-    candidate("openrouter", "openai/gpt-oss-20b:free"),
-  ],
-  balanced: [
-    candidate("openrouter", "google/gemma-4-31b-it:free"),
-    candidate("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
-  ],
-  reasoning: [
-    candidate("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
-    candidate("openrouter", "openai/gpt-oss-20b:free"),
-  ],
-  coding: [
-    candidate("openrouter", "openai/gpt-oss-20b:free"),
-    candidate("openrouter", "poolside/laguna-m-1:free"),
-  ],
-  creative: [
-    candidate("openrouter", "meta-llama/llama-3.3-70b-instruct:free"),
-    candidate("openrouter", "poolside/laguna-m-1:free"),
-  ],
-  local: [
-    candidate("openrouter", "google/gemma-3-27b-it:free"),
-    candidate("openrouter", "poolside/laguna-xs-2.1:free"),
-  ],
+  fast: [],
+  balanced: [],
+  reasoning: [],
+  coding: [],
+  creative: [],
+  local: [],
 });
 
 export const LORD_MODE_LABELS: Readonly<Record<LordMode, string>> = Object.freeze({
@@ -752,9 +608,7 @@ export const LORD_MODE_LABELS: Readonly<Record<LordMode, string>> = Object.freez
 });
 
 // Pre-built candidate maps for O(1) lookup.
-const _ALL_CANDIDATES: readonly Candidate[] = Object.freeze(
-  MODEL_REGISTRY.map((m) => candidate(m.provider, m.id)),
-);
+const _ALL_CANDIDATES: readonly Candidate[] = Object.freeze([]);
 
 const _CANDIDATE_BY_ID = new Map<string, Candidate>();
 const _CANDIDATE_BY_KEY = new Map<string, Candidate>();

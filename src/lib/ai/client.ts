@@ -9,9 +9,16 @@ export class OpenRouterClient {
   async *streamChat(
     messages: readonly ChatMessage[],
     model: string,
+    route?: readonly [string],
     signal?: AbortSignal,
   ): AsyncGenerator<string> {
-    const body: OpenRouterRequest = { model, messages, stream: true, max_tokens: 512 };
+    const body: OpenRouterRequest = {
+      model,
+      messages,
+      models: route,
+      stream: true,
+      max_tokens: 512,
+    };
     const requestBody = JSON.stringify(body);
     const headers = {
       Authorization: `Bearer ${this.apiKey}`,
@@ -20,26 +27,28 @@ export class OpenRouterClient {
       "X-Title": "LordAI",
     };
 
-    console.info(
-      [
-        `POST ${OPENROUTER_URL}`,
-        "",
-        "Model:",
-        model,
-        "",
-        "Stream:",
-        String(body.stream),
-        "",
-        "Headers:",
-        `Authorization: Bearer ${maskApiKey(this.apiKey)}`,
-        `Content-Type: ${headers["Content-Type"]}`,
-        `HTTP-Referer: ${headers["HTTP-Referer"]}`,
-        `X-Title: ${headers["X-Title"]}`,
-        "",
-        "Payload:",
-        JSON.stringify(body, null, 2),
-      ].join("\n"),
-    );
+    if (import.meta.env.DEV) {
+      console.info(
+        [
+          `POST ${OPENROUTER_URL}`,
+          "",
+          "Model:",
+          model,
+          "",
+          "Stream:",
+          String(body.stream),
+          "",
+          "Headers:",
+          `Authorization: Bearer ${maskApiKey(this.apiKey)}`,
+          `Content-Type: ${headers["Content-Type"]}`,
+          `HTTP-Referer: ${headers["HTTP-Referer"]}`,
+          `X-Title: ${headers["X-Title"]}`,
+          "",
+          "Payload:",
+          JSON.stringify(body, null, 2),
+        ].join("\n"),
+      );
+    }
 
     let response: Response;
     try {
@@ -54,7 +63,7 @@ export class OpenRouterClient {
     }
 
     if (!response.body) {
-      await logResponse(response, "");
+      if (import.meta.env.DEV) await logResponse(response, "");
       throw new OpenRouterError("network");
     }
 
@@ -71,7 +80,7 @@ export class OpenRouterClient {
     } catch (error) {
       throw normalizeOpenRouterError(error);
     } finally {
-      await logResponse(response, await diagnosticBodyPromise);
+      if (import.meta.env.DEV) await logResponse(response, await diagnosticBodyPromise);
     }
   }
 

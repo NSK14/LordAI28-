@@ -10,9 +10,11 @@ import {
   Settings,
   ChevronRight,
   BarChart3,
+  BookOpen,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
+import { usePrivateChatAccess } from "@/hooks/use-private-chat-access";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -184,6 +186,18 @@ function NavItem({
 export function NavigationDock() {
   const location = useLocation();
   const path = location.pathname;
+  const { displayLearn } = usePrivateChatAccess();
+  const visibleNav = displayLearn
+    ? [
+        ...NAV.slice(0, 2),
+        { to: "/learn", label: "Learn", icon: BookOpen },
+        ...NAV.slice(2),
+      ]
+    : NAV;
+  const { displayLearn } = usePrivateChatAccess();
+  const visibleNav = displayLearn
+    ? [...NAV.slice(0, 2), { to: "/learn", label: "Learn", icon: BookOpen }, ...NAV.slice(2)]
+    : NAV;
 
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
@@ -284,7 +298,7 @@ export function NavigationDock() {
 
         {/* Nav items */}
         <ul className="flex flex-col items-center gap-1 px-1.5">
-          {NAV.map(({ to, label, icon }, index) => {
+          {visibleNav.map(({ to, label, icon }, index) => {
             const active = to === "/" ? path === "/" : path.startsWith(to);
             return (
               <NavItem

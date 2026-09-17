@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ShareTokenRouteImport } from './routes/share/$token'
+import { Route as AuthChatRouteImport } from './routes/auth/chat'
 import { Route as ApiTitleRouteImport } from './routes/api/title'
 import { Route as ApiSharesRouteImport } from './routes/api/shares'
 import { Route as ApiSearchRouteImport } from './routes/api/search'
@@ -55,7 +56,17 @@ import { Route as AuthenticatedCanvasIndexRouteImport } from './routes/_authenti
 import { Route as ApiStudyPlansIdRouteImport } from './routes/api/study-plans/$id'
 import { Route as ApiSharesTokenRouteImport } from './routes/api/shares/$token'
 import { Route as ApiSharedTokenRouteImport } from './routes/api/shared/$token'
+import { Route as ApiSecretChatUnlockRouteImport } from './routes/api/secret-chat/unlock'
+import { Route as ApiSecretChatSessionRouteImport } from './routes/api/secret-chat/session'
+import { Route as ApiSecretChatMessagesRouteImport } from './routes/api/secret-chat/messages'
+import { Route as ApiSecretChatLogoutRouteImport } from './routes/api/secret-chat/logout'
 import { Route as ApiProjectsIdRouteImport } from './routes/api/projects/$id'
+import { Route as ApiPrivateChatSessionRouteImport } from './routes/api/private-chat/session'
+import { Route as ApiPrivateChatSeenRouteImport } from './routes/api/private-chat/seen'
+import { Route as ApiPrivateChatPresenceRouteImport } from './routes/api/private-chat/presence'
+import { Route as ApiPrivateChatPinRouteImport } from './routes/api/private-chat/pin'
+import { Route as ApiPrivateChatMessagesRouteImport } from './routes/api/private-chat/messages'
+import { Route as ApiPrivateChatLogoutRouteImport } from './routes/api/private-chat/logout'
 import { Route as ApiObservabilityHealthRouteImport } from './routes/api/observability/health'
 import { Route as ApiLordToolRouteImport } from './routes/api/lord/tool'
 import { Route as ApiLordStatusRouteImport } from './routes/api/lord/status'
@@ -146,6 +157,11 @@ const ShareTokenRoute = ShareTokenRouteImport.update({
   id: '/share/$token',
   path: '/share/$token',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthChatRoute = AuthChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => AuthRoute,
 } as any)
 const ApiTitleRoute = ApiTitleRouteImport.update({
   id: '/api/title',
@@ -355,9 +371,59 @@ const ApiSharedTokenRoute = ApiSharedTokenRouteImport.update({
   path: '/api/shared/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSecretChatUnlockRoute = ApiSecretChatUnlockRouteImport.update({
+  id: '/api/secret-chat/unlock',
+  path: '/api/secret-chat/unlock',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSecretChatSessionRoute = ApiSecretChatSessionRouteImport.update({
+  id: '/api/secret-chat/session',
+  path: '/api/secret-chat/session',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSecretChatMessagesRoute = ApiSecretChatMessagesRouteImport.update({
+  id: '/api/secret-chat/messages',
+  path: '/api/secret-chat/messages',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSecretChatLogoutRoute = ApiSecretChatLogoutRouteImport.update({
+  id: '/api/secret-chat/logout',
+  path: '/api/secret-chat/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiProjectsIdRoute = ApiProjectsIdRouteImport.update({
   id: '/api/projects/$id',
   path: '/api/projects/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPrivateChatSessionRoute = ApiPrivateChatSessionRouteImport.update({
+  id: '/api/private-chat/session',
+  path: '/api/private-chat/session',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPrivateChatSeenRoute = ApiPrivateChatSeenRouteImport.update({
+  id: '/api/private-chat/seen',
+  path: '/api/private-chat/seen',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPrivateChatPresenceRoute = ApiPrivateChatPresenceRouteImport.update({
+  id: '/api/private-chat/presence',
+  path: '/api/private-chat/presence',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPrivateChatPinRoute = ApiPrivateChatPinRouteImport.update({
+  id: '/api/private-chat/pin',
+  path: '/api/private-chat/pin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPrivateChatMessagesRoute = ApiPrivateChatMessagesRouteImport.update({
+  id: '/api/private-chat/messages',
+  path: '/api/private-chat/messages',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPrivateChatLogoutRoute = ApiPrivateChatLogoutRouteImport.update({
+  id: '/api/private-chat/logout',
+  path: '/api/private-chat/logout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiObservabilityHealthRoute = ApiObservabilityHealthRouteImport.update({
@@ -684,7 +750,7 @@ const ApiLordIotDeviceActionRoute = ApiLordIotDeviceActionRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/command-center': typeof AuthenticatedCommandCenterRouteRouteWithChildren
@@ -713,6 +779,7 @@ export interface FileRoutesByFullPath {
   '/api/search': typeof ApiSearchRoute
   '/api/shares': typeof ApiSharesRouteWithChildren
   '/api/title': typeof ApiTitleRoute
+  '/auth/chat': typeof AuthChatRoute
   '/share/$token': typeof ShareTokenRoute
   '/canvas/$id': typeof AuthenticatedCanvasIdRoute
   '/command-center/automations': typeof AuthenticatedCommandCenterAutomationsRoute
@@ -757,7 +824,17 @@ export interface FileRoutesByFullPath {
   '/api/lord/status': typeof ApiLordStatusRoute
   '/api/lord/tool': typeof ApiLordToolRoute
   '/api/observability/health': typeof ApiObservabilityHealthRoute
+  '/api/private-chat/logout': typeof ApiPrivateChatLogoutRoute
+  '/api/private-chat/messages': typeof ApiPrivateChatMessagesRoute
+  '/api/private-chat/pin': typeof ApiPrivateChatPinRoute
+  '/api/private-chat/presence': typeof ApiPrivateChatPresenceRoute
+  '/api/private-chat/seen': typeof ApiPrivateChatSeenRoute
+  '/api/private-chat/session': typeof ApiPrivateChatSessionRoute
   '/api/projects/$id': typeof ApiProjectsIdRoute
+  '/api/secret-chat/logout': typeof ApiSecretChatLogoutRoute
+  '/api/secret-chat/messages': typeof ApiSecretChatMessagesRoute
+  '/api/secret-chat/session': typeof ApiSecretChatSessionRoute
+  '/api/secret-chat/unlock': typeof ApiSecretChatUnlockRoute
   '/api/shared/$token': typeof ApiSharedTokenRoute
   '/api/shares/$token': typeof ApiSharesTokenRoute
   '/api/study-plans/$id': typeof ApiStudyPlansIdRouteWithChildren
@@ -793,7 +870,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/boards': typeof AuthenticatedBoardsRoute
@@ -821,6 +898,7 @@ export interface FileRoutesByTo {
   '/api/search': typeof ApiSearchRoute
   '/api/shares': typeof ApiSharesRouteWithChildren
   '/api/title': typeof ApiTitleRoute
+  '/auth/chat': typeof AuthChatRoute
   '/share/$token': typeof ShareTokenRoute
   '/canvas/$id': typeof AuthenticatedCanvasIdRoute
   '/command-center/automations': typeof AuthenticatedCommandCenterAutomationsRoute
@@ -865,7 +943,17 @@ export interface FileRoutesByTo {
   '/api/lord/status': typeof ApiLordStatusRoute
   '/api/lord/tool': typeof ApiLordToolRoute
   '/api/observability/health': typeof ApiObservabilityHealthRoute
+  '/api/private-chat/logout': typeof ApiPrivateChatLogoutRoute
+  '/api/private-chat/messages': typeof ApiPrivateChatMessagesRoute
+  '/api/private-chat/pin': typeof ApiPrivateChatPinRoute
+  '/api/private-chat/presence': typeof ApiPrivateChatPresenceRoute
+  '/api/private-chat/seen': typeof ApiPrivateChatSeenRoute
+  '/api/private-chat/session': typeof ApiPrivateChatSessionRoute
   '/api/projects/$id': typeof ApiProjectsIdRoute
+  '/api/secret-chat/logout': typeof ApiSecretChatLogoutRoute
+  '/api/secret-chat/messages': typeof ApiSecretChatMessagesRoute
+  '/api/secret-chat/session': typeof ApiSecretChatSessionRoute
+  '/api/secret-chat/unlock': typeof ApiSecretChatUnlockRoute
   '/api/shared/$token': typeof ApiSharedTokenRoute
   '/api/shares/$token': typeof ApiSharesTokenRoute
   '/api/study-plans/$id': typeof ApiStudyPlansIdRouteWithChildren
@@ -903,7 +991,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/command-center': typeof AuthenticatedCommandCenterRouteRouteWithChildren
@@ -932,6 +1020,7 @@ export interface FileRoutesById {
   '/api/search': typeof ApiSearchRoute
   '/api/shares': typeof ApiSharesRouteWithChildren
   '/api/title': typeof ApiTitleRoute
+  '/auth/chat': typeof AuthChatRoute
   '/share/$token': typeof ShareTokenRoute
   '/_authenticated/canvas/$id': typeof AuthenticatedCanvasIdRoute
   '/_authenticated/command-center/automations': typeof AuthenticatedCommandCenterAutomationsRoute
@@ -976,7 +1065,17 @@ export interface FileRoutesById {
   '/api/lord/status': typeof ApiLordStatusRoute
   '/api/lord/tool': typeof ApiLordToolRoute
   '/api/observability/health': typeof ApiObservabilityHealthRoute
+  '/api/private-chat/logout': typeof ApiPrivateChatLogoutRoute
+  '/api/private-chat/messages': typeof ApiPrivateChatMessagesRoute
+  '/api/private-chat/pin': typeof ApiPrivateChatPinRoute
+  '/api/private-chat/presence': typeof ApiPrivateChatPresenceRoute
+  '/api/private-chat/seen': typeof ApiPrivateChatSeenRoute
+  '/api/private-chat/session': typeof ApiPrivateChatSessionRoute
   '/api/projects/$id': typeof ApiProjectsIdRoute
+  '/api/secret-chat/logout': typeof ApiSecretChatLogoutRoute
+  '/api/secret-chat/messages': typeof ApiSecretChatMessagesRoute
+  '/api/secret-chat/session': typeof ApiSecretChatSessionRoute
+  '/api/secret-chat/unlock': typeof ApiSecretChatUnlockRoute
   '/api/shared/$token': typeof ApiSharedTokenRoute
   '/api/shares/$token': typeof ApiSharesTokenRoute
   '/api/study-plans/$id': typeof ApiStudyPlansIdRouteWithChildren
@@ -1043,6 +1142,7 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/api/shares'
     | '/api/title'
+    | '/auth/chat'
     | '/share/$token'
     | '/canvas/$id'
     | '/command-center/automations'
@@ -1087,7 +1187,17 @@ export interface FileRouteTypes {
     | '/api/lord/status'
     | '/api/lord/tool'
     | '/api/observability/health'
+    | '/api/private-chat/logout'
+    | '/api/private-chat/messages'
+    | '/api/private-chat/pin'
+    | '/api/private-chat/presence'
+    | '/api/private-chat/seen'
+    | '/api/private-chat/session'
     | '/api/projects/$id'
+    | '/api/secret-chat/logout'
+    | '/api/secret-chat/messages'
+    | '/api/secret-chat/session'
+    | '/api/secret-chat/unlock'
     | '/api/shared/$token'
     | '/api/shares/$token'
     | '/api/study-plans/$id'
@@ -1151,6 +1261,7 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/api/shares'
     | '/api/title'
+    | '/auth/chat'
     | '/share/$token'
     | '/canvas/$id'
     | '/command-center/automations'
@@ -1195,7 +1306,17 @@ export interface FileRouteTypes {
     | '/api/lord/status'
     | '/api/lord/tool'
     | '/api/observability/health'
+    | '/api/private-chat/logout'
+    | '/api/private-chat/messages'
+    | '/api/private-chat/pin'
+    | '/api/private-chat/presence'
+    | '/api/private-chat/seen'
+    | '/api/private-chat/session'
     | '/api/projects/$id'
+    | '/api/secret-chat/logout'
+    | '/api/secret-chat/messages'
+    | '/api/secret-chat/session'
+    | '/api/secret-chat/unlock'
     | '/api/shared/$token'
     | '/api/shares/$token'
     | '/api/study-plans/$id'
@@ -1261,6 +1382,7 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/api/shares'
     | '/api/title'
+    | '/auth/chat'
     | '/share/$token'
     | '/_authenticated/canvas/$id'
     | '/_authenticated/command-center/automations'
@@ -1305,7 +1427,17 @@ export interface FileRouteTypes {
     | '/api/lord/status'
     | '/api/lord/tool'
     | '/api/observability/health'
+    | '/api/private-chat/logout'
+    | '/api/private-chat/messages'
+    | '/api/private-chat/pin'
+    | '/api/private-chat/presence'
+    | '/api/private-chat/seen'
+    | '/api/private-chat/session'
     | '/api/projects/$id'
+    | '/api/secret-chat/logout'
+    | '/api/secret-chat/messages'
+    | '/api/secret-chat/session'
+    | '/api/secret-chat/unlock'
     | '/api/shared/$token'
     | '/api/shares/$token'
     | '/api/study-plans/$id'
@@ -1343,7 +1475,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  AuthRoute: typeof AuthRoute
+  AuthRoute: typeof AuthRouteWithChildren
   ResetPasswordRoute: typeof ResetPasswordRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiChatRoute: typeof ApiChatRoute
@@ -1383,7 +1515,17 @@ export interface RootRouteChildren {
   ApiLordStatusRoute: typeof ApiLordStatusRoute
   ApiLordToolRoute: typeof ApiLordToolRoute
   ApiObservabilityHealthRoute: typeof ApiObservabilityHealthRoute
+  ApiPrivateChatLogoutRoute: typeof ApiPrivateChatLogoutRoute
+  ApiPrivateChatMessagesRoute: typeof ApiPrivateChatMessagesRoute
+  ApiPrivateChatPinRoute: typeof ApiPrivateChatPinRoute
+  ApiPrivateChatPresenceRoute: typeof ApiPrivateChatPresenceRoute
+  ApiPrivateChatSeenRoute: typeof ApiPrivateChatSeenRoute
+  ApiPrivateChatSessionRoute: typeof ApiPrivateChatSessionRoute
   ApiProjectsIdRoute: typeof ApiProjectsIdRoute
+  ApiSecretChatLogoutRoute: typeof ApiSecretChatLogoutRoute
+  ApiSecretChatMessagesRoute: typeof ApiSecretChatMessagesRoute
+  ApiSecretChatSessionRoute: typeof ApiSecretChatSessionRoute
+  ApiSecretChatUnlockRoute: typeof ApiSecretChatUnlockRoute
   ApiSharedTokenRoute: typeof ApiSharedTokenRoute
   ApiStudyPlansIdRoute: typeof ApiStudyPlansIdRouteWithChildren
   ApiCanvasIndexRoute: typeof ApiCanvasIndexRoute
@@ -1449,6 +1591,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/share/$token'
       preLoaderRoute: typeof ShareTokenRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/auth/chat': {
+      id: '/auth/chat'
+      path: '/chat'
+      fullPath: '/auth/chat'
+      preLoaderRoute: typeof AuthChatRouteImport
+      parentRoute: typeof AuthRoute
     }
     '/api/title': {
       id: '/api/title'
@@ -1730,11 +1879,81 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSharedTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/secret-chat/unlock': {
+      id: '/api/secret-chat/unlock'
+      path: '/api/secret-chat/unlock'
+      fullPath: '/api/secret-chat/unlock'
+      preLoaderRoute: typeof ApiSecretChatUnlockRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/secret-chat/session': {
+      id: '/api/secret-chat/session'
+      path: '/api/secret-chat/session'
+      fullPath: '/api/secret-chat/session'
+      preLoaderRoute: typeof ApiSecretChatSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/secret-chat/messages': {
+      id: '/api/secret-chat/messages'
+      path: '/api/secret-chat/messages'
+      fullPath: '/api/secret-chat/messages'
+      preLoaderRoute: typeof ApiSecretChatMessagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/secret-chat/logout': {
+      id: '/api/secret-chat/logout'
+      path: '/api/secret-chat/logout'
+      fullPath: '/api/secret-chat/logout'
+      preLoaderRoute: typeof ApiSecretChatLogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/projects/$id': {
       id: '/api/projects/$id'
       path: '/api/projects/$id'
       fullPath: '/api/projects/$id'
       preLoaderRoute: typeof ApiProjectsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/private-chat/session': {
+      id: '/api/private-chat/session'
+      path: '/api/private-chat/session'
+      fullPath: '/api/private-chat/session'
+      preLoaderRoute: typeof ApiPrivateChatSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/private-chat/seen': {
+      id: '/api/private-chat/seen'
+      path: '/api/private-chat/seen'
+      fullPath: '/api/private-chat/seen'
+      preLoaderRoute: typeof ApiPrivateChatSeenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/private-chat/presence': {
+      id: '/api/private-chat/presence'
+      path: '/api/private-chat/presence'
+      fullPath: '/api/private-chat/presence'
+      preLoaderRoute: typeof ApiPrivateChatPresenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/private-chat/pin': {
+      id: '/api/private-chat/pin'
+      path: '/api/private-chat/pin'
+      fullPath: '/api/private-chat/pin'
+      preLoaderRoute: typeof ApiPrivateChatPinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/private-chat/messages': {
+      id: '/api/private-chat/messages'
+      path: '/api/private-chat/messages'
+      fullPath: '/api/private-chat/messages'
+      preLoaderRoute: typeof ApiPrivateChatMessagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/private-chat/logout': {
+      id: '/api/private-chat/logout'
+      path: '/api/private-chat/logout'
+      fullPath: '/api/private-chat/logout'
+      preLoaderRoute: typeof ApiPrivateChatLogoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/observability/health': {
@@ -2268,6 +2487,16 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface AuthRouteChildren {
+  AuthChatRoute: typeof AuthChatRoute
+}
+
+const AuthRouteChildren: AuthRouteChildren = {
+  AuthChatRoute: AuthChatRoute,
+}
+
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
+
 interface ApiImagesRouteChildren {
   ApiImagesIdRoute: typeof ApiImagesIdRoute
   ApiImagesModelsRoute: typeof ApiImagesModelsRoute
@@ -2319,7 +2548,7 @@ const ApiStudyPlansIdRouteWithChildren = ApiStudyPlansIdRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  AuthRoute: AuthRoute,
+  AuthRoute: AuthRouteWithChildren,
   ResetPasswordRoute: ResetPasswordRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiChatRoute: ApiChatRoute,
@@ -2359,7 +2588,17 @@ const rootRouteChildren: RootRouteChildren = {
   ApiLordStatusRoute: ApiLordStatusRoute,
   ApiLordToolRoute: ApiLordToolRoute,
   ApiObservabilityHealthRoute: ApiObservabilityHealthRoute,
+  ApiPrivateChatLogoutRoute: ApiPrivateChatLogoutRoute,
+  ApiPrivateChatMessagesRoute: ApiPrivateChatMessagesRoute,
+  ApiPrivateChatPinRoute: ApiPrivateChatPinRoute,
+  ApiPrivateChatPresenceRoute: ApiPrivateChatPresenceRoute,
+  ApiPrivateChatSeenRoute: ApiPrivateChatSeenRoute,
+  ApiPrivateChatSessionRoute: ApiPrivateChatSessionRoute,
   ApiProjectsIdRoute: ApiProjectsIdRoute,
+  ApiSecretChatLogoutRoute: ApiSecretChatLogoutRoute,
+  ApiSecretChatMessagesRoute: ApiSecretChatMessagesRoute,
+  ApiSecretChatSessionRoute: ApiSecretChatSessionRoute,
+  ApiSecretChatUnlockRoute: ApiSecretChatUnlockRoute,
   ApiSharedTokenRoute: ApiSharedTokenRoute,
   ApiStudyPlansIdRoute: ApiStudyPlansIdRouteWithChildren,
   ApiCanvasIndexRoute: ApiCanvasIndexRoute,

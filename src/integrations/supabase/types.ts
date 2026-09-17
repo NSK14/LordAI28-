@@ -195,6 +195,42 @@ export type Database = {
         };
         Relationships: [];
       };
+      secret_messages: {
+        Row: {
+          id: string;
+          sender_id: string;
+          receiver_id: string;
+          message: string;
+          created_at: string;
+          read_at: string | null;
+          seen_at: string | null;
+          edited_at: string | null;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          sender_id: string;
+          receiver_id: string;
+          message: string;
+          created_at?: string;
+          read_at?: string | null;
+          seen_at?: string | null;
+          edited_at?: string | null;
+          deleted_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          sender_id?: string;
+          receiver_id?: string;
+          message?: string;
+          created_at?: string;
+          read_at?: string | null;
+          seen_at?: string | null;
+          edited_at?: string | null;
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
       files: {
         Row: {
           id: string;

@@ -1,10 +1,5 @@
 export type OpenRouterErrorKind =
-  | "missing_api_key"
-  | "invalid_api_key"
-  | "rate_limit"
-  | "unavailable"
-  | "network"
-  | "request";
+  "missing_api_key" | "invalid_api_key" | "rate_limit" | "unavailable" | "network" | "request";
 
 const ERROR_MESSAGES: Record<OpenRouterErrorKind, string> = {
   missing_api_key: "OpenRouter API key is missing.",

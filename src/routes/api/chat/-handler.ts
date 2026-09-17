@@ -38,8 +38,7 @@ export function createChatRoute() {
           }
 
           const authContext = context as
-            | { userId?: string; supabase?: Parameters<typeof buildMemoryPrompt>[0] }
-            | undefined;
+            { userId?: string; supabase?: Parameters<typeof buildMemoryPrompt>[0] } | undefined;
           let memoryPrompt = "";
           if (authContext?.userId && authContext.supabase) {
             memoryPrompt = await buildMemoryPrompt(
@@ -53,6 +52,7 @@ export function createChatRoute() {
           try {
             return streamChat(
               toChatMessages(parsed.data.messages as unknown as UIMessage[], memoryPrompt),
+              parsed.data.mode ?? "balanced",
               request.signal,
             );
           } catch (error) {
@@ -94,7 +94,14 @@ function getGatewayErrorStatus(error: unknown): number {
   return 503;
 }
 
-function getGatewayErrorCode(error: unknown): "AI_NOT_CONFIGURED" | "AI_AUTH_ERROR" | "AI_RATE_LIMITED" | "AI_BAD_REQUEST" | "AI_UPSTREAM_ERROR" {
+function getGatewayErrorCode(
+  error: unknown,
+):
+  | "AI_NOT_CONFIGURED"
+  | "AI_AUTH_ERROR"
+  | "AI_RATE_LIMITED"
+  | "AI_BAD_REQUEST"
+  | "AI_UPSTREAM_ERROR" {
   if (isAIConfigurationError(error)) return "AI_NOT_CONFIGURED";
   if (error instanceof OpenRouterError) {
     if (error.kind === "invalid_api_key") return "AI_AUTH_ERROR";

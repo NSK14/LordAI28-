@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { MODEL_REGISTRY } from "@/lib/ai/models";
+import { LORD_MODES } from "@/lib/modes";
 import { checkImageHealth } from "@/lib/ai/image";
 
 export const Route = createFileRoute("/api/admin/gateway")({
@@ -11,7 +11,12 @@ export const Route = createFileRoute("/api/admin/gateway")({
           providerConfiguration: [],
           providers: {},
           imageProvider: await checkImageHealth(),
-          registry: MODEL_REGISTRY,
+          registry: LORD_MODES.map((mode) => ({
+            id: mode.id,
+            label: mode.label,
+            provider: "OpenRouter",
+            type: "chat",
+          })),
         }),
       POST: async ({ request }) => {
         const action =

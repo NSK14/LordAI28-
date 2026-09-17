@@ -3,7 +3,7 @@ import { Loader2, Paperclip, Image, FileText, Globe, Mic, ArrowRight } from "luc
 
 import { cn } from "@/lib/utils";
 
-import { MODEL_REGISTRY } from "@/lib/ai/models";
+import { MODELS } from "./chat/input/models";
 
 export default function ChatInput({
   value,
@@ -145,7 +145,7 @@ export default function ChatInput({
               onChange={(e) => onModelIdChange(e.target.value)}
               className="rounded-2xl bg-white/6 px-3 py-2 text-sm text-white"
             >
-              {MODEL_REGISTRY.map((m) => (
+              {MODELS.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
                 </option>

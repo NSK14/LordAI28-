@@ -1,8 +1,7 @@
 import { store, type CalendarEvent, type Task, type Memory } from "@/lib/lord-store";
 import { supabase } from "@/integrations/supabase/client";
 import { monitoring } from "@/lib/monitoring-service";
-import { DEFAULT_MODEL_ID, MODEL_REGISTRY } from "@/lib/ai/models";
-import { DEFAULT_MODE } from "@/lib/modes";
+import { DEFAULT_MODE, LORD_MODES } from "@/lib/modes";
 import { getApiBaseUrl } from "@/lib/api-config";
 import { Capacitor } from "@capacitor/core";
 
@@ -422,12 +421,12 @@ export async function fetchAI(): Promise<DashboardAI> {
   const localAvailable = online && hasLocalInference();
 
   const mode = store.get("chat-mode", DEFAULT_MODE);
-  const activeModelLabel = MODEL_REGISTRY.find((m) => m.id === DEFAULT_MODEL_ID)?.label ?? null;
+  const activeModelLabel = "OpenRouter Auto (Free)";
 
-  const models: DashboardAIModel[] = MODEL_REGISTRY.map((m) => ({
+  const models: DashboardAIModel[] = LORD_MODES.map((m) => ({
     id: m.id,
     label: m.label,
-    provider: m.provider,
+    provider: "OpenRouter",
     available: online,
   }));
 

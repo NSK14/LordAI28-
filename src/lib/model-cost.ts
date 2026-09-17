@@ -14,12 +14,6 @@ MODEL_COST["gemini/gemini-2.5-flash-lite"] = { input: 0.075, output: 0.3 };
 MODEL_COST["gemini/gemini-2.0-flash"] = { input: 0.1, output: 0.4 };
 MODEL_COST["openai/gpt-4o-mini"] = { input: 0.15, output: 0.6 };
 MODEL_COST["openai/gpt-4o"] = { input: 2.5, output: 10.0 };
-MODEL_COST["google/gemma-3-27b-it:free"] = { input: 0, output: 0 };
-MODEL_COST["google/gemma-4-31b-it:free"] = { input: 0, output: 0 };
-MODEL_COST["openai/gpt-oss-20b:free"] = { input: 0, output: 0 };
-MODEL_COST["meta-llama/llama-3.3-70b-instruct:free"] = { input: 0, output: 0 };
-MODEL_COST["poolside/laguna-m-1:free"] = { input: 0, output: 0 };
-MODEL_COST["poolside/laguna-xs-2.1:free"] = { input: 0, output: 0 };
 
 export function estimateCost(modelId: string, inputTokens: number, outputTokens: number): number {
   const rate = MODEL_COST[modelId] ?? { input: 0, output: 0 };
